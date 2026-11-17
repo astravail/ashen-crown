@@ -295,11 +295,11 @@ func mask_image() -> Image:
 
 
 func _place_chests(zone: Dictionary) -> void:
-	var want: int = zone.get("chests", 9)
+	var want: int = zone.get("chests", 5)
 	# Dead ends of side branches hold the good ones.
 	var iron := 0
 	for b in branches:
-		if iron >= 3 or chests.size() >= want:
+		if iron >= 2 or chests.size() >= want:
 			break
 		if is_floor(b.x, b.y):
 			chests.append({"pos": (Vector2(b) + Vector2(0.5, 0.5)) * CELL, "iron": true})
@@ -316,7 +316,7 @@ func _place_chests(zone: Dictionary) -> void:
 			continue
 		var ok := true
 		for ch in chests:
-			if (ch.pos / CELL).distance_to(c) < (6.0 if small else 11.0):
+			if (ch.pos / CELL).distance_to(c) < (8.0 if small else 16.0):
 				ok = false
 				break
 		if ok:

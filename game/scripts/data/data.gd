@@ -379,7 +379,7 @@ const ZONES := [
 	# Interiors: houses and mines you walk into. Not part of the main route.
 	{
 		"id": "cellar", "name": "Maren's Cellar", "line": "Someone has been keeping things down here.", "interior": true, "parent": -1, "act": 0,
-		"style": "dungeon", "size": Vector2i(64, 64), "ambient": "amb_crypt", "prop_density": 2.0, "chests": 4, "tier": 0,
+		"style": "dungeon", "size": Vector2i(64, 64), "ambient": "amb_crypt", "prop_density": 2.0, "chests": 3, "tier": 0,
 		"ground_a": Color(0.34, 0.3, 0.26), "ground_b": Color(0.16, 0.14, 0.12), "vein": Color(1.8, 0.8, 0.3), "vein_amt": 0.1,
 		"wall": Color(0.03, 0.025, 0.02), "pattern": 1.0, "modulate": Color(0.46, 0.42, 0.4),
 		"pool": {"cellar_ghoul": 3, "thornhusk": 1}, "packs": 6, "hp_mult": 1.0, "dmg_mult": 1.0,
@@ -387,7 +387,7 @@ const ZONES := [
 	},
 	{
 		"id": "old_mine", "name": "The Collapsed Mine", "line": "The shaft was sealed for a reason.", "interior": true, "parent": 0, "act": 0,
-		"style": "dungeon", "size": Vector2i(90, 90), "ambient": "amb_crypt", "prop_density": 1.8, "chests": 6, "tier": 1,
+		"style": "dungeon", "size": Vector2i(90, 90), "ambient": "amb_crypt", "prop_density": 1.8, "chests": 5, "tier": 1,
 		"ground_a": Color(0.34, 0.28, 0.22), "ground_b": Color(0.16, 0.12, 0.09), "vein": Color(2.4, 1.2, 0.3), "vein_amt": 0.4,
 		"wall": Color(0.03, 0.025, 0.02), "pattern": 3.0, "modulate": Color(0.44, 0.4, 0.36),
 		"pool": {"miner": 4, "pit_hound": 2, "cave_brute": 1, "root_crawler": 2}, "packs": 16, "hp_mult": 1.4, "dmg_mult": 1.25,
@@ -396,7 +396,7 @@ const ZONES := [
 	},
 	{
 		"id": "gravedigger", "name": "The Gravedigger's Hut", "line": "He dug too many holes.", "interior": true, "parent": 4, "act": 2,
-		"style": "dungeon", "size": Vector2i(80, 80), "ambient": "amb_marsh", "prop_density": 1.6, "chests": 6, "tier": 4,
+		"style": "dungeon", "size": Vector2i(80, 80), "ambient": "amb_marsh", "prop_density": 1.6, "chests": 5, "tier": 4,
 		"ground_a": Color(0.34, 0.36, 0.32), "ground_b": Color(0.17, 0.19, 0.17), "vein": Color(1.4, 1.9, 0.5), "vein_amt": 0.35,
 		"wall": Color(0.03, 0.04, 0.035), "pattern": 2.0, "modulate": Color(0.42, 0.46, 0.44),
 		"pool": {"gravedigger_ghoul": 3, "bog_bloater": 2, "crypt_wraith": 2}, "packs": 14, "hp_mult": 2.8, "dmg_mult": 1.85,
