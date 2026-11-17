@@ -351,7 +351,7 @@ func _update_aim() -> void:
 			aim_dir = r.normalized()
 			aim_point = global_position + aim_dir * 320.0
 			return
-		var e := world.nearest_enemy(global_position, 650.0)
+		var e: Enemy = world.nearest_enemy(global_position, 650.0) if bool(Game.settings.get("aim_assist", true)) else null
 		if e:
 			aim_point = e.global_position
 			aim_dir = (aim_point - global_position).normalized()

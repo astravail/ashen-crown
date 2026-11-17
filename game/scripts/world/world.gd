@@ -1276,7 +1276,7 @@ func _kill(target: Actor, src: Actor, overkill := false) -> void:
 		if _flask_kills >= 32:
 			_flask_kills = 0
 			player.add_flask_charge()
-	var globe_chance := 0.09 if not (e.elite or e.is_champion) else 1.0
+	var globe_chance := 0.035 if not (e.elite or e.is_champion) else 0.3
 	if Game.gear_stat("blast") > 0.0:
 		hazards_explosion(pos, 70.0 + e.radius * 2.0, e.max_hp * Game.gear_stat("blast") / 100.0, player, Actor.Team.PLAYER, Color(3.0, 1.0, 0.25))
 	if randf() < globe_chance:

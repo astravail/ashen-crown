@@ -42,6 +42,15 @@ func _run() -> void:
 	main.menus.show_settings(func(): pass)
 	await _wait(0.5)
 	await _shot("settings")
+	main.menus.show_keybinds(func(): pass)
+	await _wait(0.5)
+	await _shot("keybinds")
+	main.menus.show_whats_new(func(): pass)
+	await _wait(0.5)
+	await _shot("whatsnew")
+	main.menus.show_title()
+	await _wait(0.5)
+	await _shot("title2")
 	Game.new_run("knight")
 	Game.hero_name = "Aldric"
 	main._carry = {}

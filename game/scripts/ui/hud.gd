@@ -1,5 +1,7 @@
 class_name Hud
 extends Control
+
+const Ink := preload("res://scripts/fx/ink.gd")
 ## In-game HUD, drawn directly: orbs, skill bar, ash meter, minimap, boss bar, banners.
 
 var world: World
@@ -93,14 +95,40 @@ func _edge(vs: Vector2, c: Color) -> void:
 	draw_polygon(PackedVector2Array([Vector2(vs.x - e, 0), Vector2(vs.x, 0), Vector2(vs.x, vs.y), Vector2(vs.x - e, vs.y)]), PackedColorArray([clear, c, c, clear]))
 
 
-func _orb(center: Vector2, r: float, ratio: float, col: Color, trail: float) -> void:
+static var _ring_tex: Texture2D
+
+
+## A disc that is clear in the middle and dark at the edge: it rounds a flat circle into a ball.
+func _ring() -> Texture2D:
+	if _ring_tex == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.5, 0.8, 0.93, 0.985, 1.0])
+		g.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0, 0, 0, 0.05), Color(0, 0, 0, 0.32), Color(0, 0, 0, 0.6), Color(0, 0, 0, 0.66), Color(0, 0, 0, 0)])
+		var t2 := GradientTexture2D.new()
+		t2.gradient = g
+		t2.fill = GradientTexture2D.FILL_RADIAL
+		t2.fill_from = Vector2(0.5, 0.5)
+		t2.fill_to = Vector2(1.0, 0.5)
+		t2.width = 128
+		t2.height = 128
+		_ring_tex = t2
+	return _ring_tex
+
+
+func _orb(center: Vector2, r: float, ratio: float, col: Color, trail: float, style := "") -> void:
 	draw_circle(center, r + 7.0, Color(0.03, 0.025, 0.025, 0.92), true, -1.0, true)
 	draw_circle(center, r, Color(0.08, 0.06, 0.055), true, -1.0, true)
 	if trail > ratio:
 		_liquid(center, r, trail, Color(0.9, 0.85, 0.75, 0.25))
 	_liquid(center, r, ratio, col)
-	# Glass highlight
-	draw_arc(center + Vector2(-r * 0.12, -r * 0.12), r * 0.72, PI * 1.05, PI * 1.45, 20, Color(1, 1, 1, 0.08), r * 0.12, true)
+	_orb_fx(center, r, ratio, style)
+	# Roundness: the edge falls into shadow, light pools on the upper left and the lower right catches a glow
+	var rr := r - 1.0
+	draw_texture_rect(_ring(), Rect2(center - Vector2(rr, rr), Vector2(rr, rr) * 2.0), false)
+	var soft := Ink.soft_tex()
+	draw_texture_rect(soft, Rect2(center + Vector2(-0.62, -0.7) * r, Vector2(0.78, 0.6) * r), false, Color(1, 1, 1, 0.34))
+	draw_texture_rect(soft, Rect2(center + Vector2(-0.42, -0.58) * r, Vector2(0.26, 0.16) * r), false, Color(1, 1, 1, 0.75))
+	draw_texture_rect(soft, Rect2(center + Vector2(0.05, 0.42) * r, Vector2(0.62, 0.42) * r), false, Color(col.r, col.g, col.b, 0.0).lerp(Color(1, 0.8, 0.7, 0.16), 1.0))
 	# Gothic bronze ring with a lit upper-left edge and rivets.
 	draw_arc(center, r + 5.0, 0.0, TAU, 72, Color(0.02, 0.015, 0.012), 9.0, true)
 	draw_arc(center, r + 5.0, 0.0, TAU, 72, Ornate.GOLD_LO, 6.0, true)
@@ -114,13 +142,87 @@ func _orb(center: Vector2, r: float, ratio: float, col: Color, trail: float) -> 
 		draw_circle(q, 2.2, Ornate.GOLD_HI.lerp(Ornate.GOLD_LO, 0.5 + 0.5 * sin(a)), true, -1.0, true)
 
 
+## What lives in the glass: each resource has its own matter, and its own way of showing how much is left.
+func _orb_fx(center: Vector2, r: float, ratio: float, style: String) -> void:
+	ratio = clampf(ratio, 0.0, 1.0)
+	if ratio <= 0.01:
+		return
+	var rr := r - 3.0
+	var surf_y := center.y + rr - 2.0 * rr * ratio
+	var half := sqrt(maxf(rr * rr - (surf_y - center.y) * (surf_y - center.y), 0.0)) * 0.86
+	var soft := Ink.soft_tex()
+	match style:
+		"blood":
+			# slow bubbles rising through thick blood and a dark clot drifting at the surface
+			for i in 7:
+				var ph := fposmod(t * (0.12 + i * 0.017) + i * 0.37, 1.0)
+				var bx := center.x + sin(i * 2.3 + t * 0.4) * half * 0.8
+				var by := center.y + rr - ph * (center.y + rr - surf_y)
+				if by > surf_y + 3.0:
+					Ink.dot(self, Vector2(bx, by), 1.4 + (i % 3) * 0.9, Color(1.0, 0.55, 0.5, 0.35 * sin(ph * PI)))
+			draw_texture_rect(soft, Rect2(center.x - half * 0.6 + sin(t * 0.5) * half * 0.3, surf_y - 2.0, half * 0.7, 9.0), false, Color(0.12, 0.0, 0.0, 0.55))
+		"Cinder":
+			# molten metal: a hot seam under a cooling crust, and sparks lifting off the surface
+			for i in 5:
+				var cx := center.x + sin(i * 1.9 + t * 0.35) * half * 0.8
+				draw_texture_rect(soft, Rect2(cx - 11, surf_y - 1.0, 22, 7), false, Color(0.08, 0.03, 0.02, 0.7))
+			draw_texture_rect(soft, Rect2(center.x - half, surf_y - 6.0, half * 2.0, 14.0), false, Color(1.6, 0.9, 0.3, 0.45 + 0.15 * sin(t * 3.0)))
+			for i in 6:
+				var ph := fposmod(t * (0.35 + i * 0.05) + i * 0.29, 1.0)
+				var ex := center.x + sin(i * 3.1 + ph * 4.0) * half * 0.7
+				var ey := surf_y - ph * minf(r * 0.7, surf_y - (center.y - rr) - 2.0)
+				if ey > center.y - rr + 4.0:
+					Ink.dot(self, Vector2(ex, ey), 1.6, Color(1.0, 0.7, 0.25, 0.9 * (1.0 - ph)))
+		"Soul Embers":
+			# pale wisps curling up through the glass, with cold motes among them
+			var segs := PackedVector2Array()
+			for w in 4:
+				var x0 := center.x + (w - 1.5) * half * 0.5
+				var prev := Vector2(x0, center.y + rr - 2.0)
+				var top := maxf(surf_y + 4.0, center.y - rr + 6.0)
+				for k in range(1, 13):
+					var f := float(k) / 12.0
+					var y := lerpf(center.y + rr - 2.0, top, f)
+					var q := Vector2(x0 + sin(f * 7.0 + t * 1.3 + w * 1.7) * half * 0.16 * (0.4 + f), y)
+					segs.append(prev)
+					segs.append(q)
+					prev = q
+			draw_multiline(segs, Color(0.75, 1.0, 0.95, 0.3), 1.6, true)
+			for i in 6:
+				var ph := fposmod(t * 0.2 + i * 0.17, 1.0)
+				Ink.dot(self, Vector2(center.x + sin(i * 2.7 + t * 0.6) * half * 0.8, center.y + rr - ph * (center.y + rr - surf_y)), 1.5, Color(0.8, 1.0, 1.0, 0.7 * sin(ph * PI)))
+		"Heat":
+			# flames standing on the surface: the more heat, the taller they stand
+			var room := minf(r * 0.95, surf_y - (center.y - rr) - 2.0)
+			if room > 6.0:
+				for i in 5:
+					var fx := center.x + (i - 2.0) * half * 0.42
+					var fh := room * (0.55 + 0.45 * sin(t * 4.0 + i * 1.7)) * (1.0 - absf(i - 2.0) * 0.18)
+					Ink.flame(self, Vector2(fx, surf_y + 1.0), half * 0.28, fh, t, float(i) * 3.7, Color(1.8, 0.65, 0.12, 0.85), Color(1.4, 0.22, 0.05, 0.6))
+		"Crown Fire":
+			# gold that turns slowly, glittering
+			for i in 8:
+				var a := t * 0.6 + i * TAU / 8.0
+				var pp := Vector2(center.x + cos(a) * half * 0.6, lerpf(surf_y + 6.0, center.y + rr - 6.0, 0.5 + 0.5 * sin(a * 1.3 + i)))
+				Ink.dot(self, pp, 1.5, Color(1.0, 0.95, 0.6, 0.6 * (0.5 + 0.5 * sin(t * 3.0 + i))))
+
+
 func _liquid(center: Vector2, r: float, ratio: float, col: Color) -> void:
 	ratio = clampf(ratio, 0.0, 1.0)
 	if ratio <= 0.005:
 		return
 	var rr := r - 1.0
 	if ratio >= 0.995:
-		draw_circle(center, rr, col, true, -1.0, true)
+		var pts_f := PackedVector2Array()
+		var cols_f := PackedColorArray()
+		for i in 48:
+			var a := TAU * i / 48.0
+			var q := Vector2(cos(a), sin(a))
+			pts_f.append(center + q * rr)
+			var k := clampf(q.y * 0.5 + 0.5, 0.0, 1.0)
+			var c3 := col.lerp(Color(col.r * 0.32, col.g * 0.3, col.b * 0.3, col.a), k * 0.85)
+			cols_f.append(Color(c3.r * (1.25 - k * 0.2), c3.g * (1.25 - k * 0.2), c3.b * (1.25 - k * 0.2), col.a))
+		draw_polygon(pts_f, cols_f)
 		return
 	var dy := rr - 2.0 * rr * ratio
 	var a0 := asin(clampf(dy / rr, -1.0, 1.0))
@@ -138,9 +240,17 @@ func _liquid(center: Vector2, r: float, ratio: float, col: Color) -> void:
 		var k := float(i) / m
 		var x := lerpf(left.x, right.x, k)
 		pts.append(Vector2(x, center.y + dy + sin(x * 0.08 + t * 3.0) * amp * sin(k * PI)))
-	draw_colored_polygon(pts, col)
-	var hl := Color(1, 1, 1, 0.12)
-	draw_line(left, right, hl, 1.0, true)
+	# lit at the surface and deepening toward the bottom of the glass
+	var cols := PackedColorArray()
+	cols.resize(pts.size())
+	var top_y := center.y + dy
+	for i in pts.size():
+		var k := clampf((pts[i].y - top_y) / maxf(center.y + rr - top_y, 1.0), 0.0, 1.0)
+		var c2 := col.lerp(Color(col.r * 0.32, col.g * 0.3, col.b * 0.3, col.a), k * 0.85)
+		cols[i] = Color(c2.r * (1.25 - k * 0.2), c2.g * (1.25 - k * 0.2), c2.b * (1.25 - k * 0.2), col.a)
+	draw_polygon(pts, cols)
+	draw_line(left, right, Color(1, 0.95, 0.9, 0.5), 2.0, true)
+	draw_line(left + Vector2(0, 2), right + Vector2(0, 2), Color(1, 1, 1, 0.12), 3.0, true)
 
 
 func _draw_bottom(vs: Vector2, p: Player) -> void:
@@ -157,9 +267,9 @@ func _draw_bottom(vs: Vector2, p: Player) -> void:
 	var orb_r := 70.0
 	var hp_c := Vector2(cx - 500, vs.y - 118)
 	var res_c := Vector2(cx + 500, vs.y - 118)
-	_orb(hp_c, orb_r, p.hp / p.max_hp, Color(0.78, 0.05, 0.04), _hp_trail)
+	_orb(hp_c, orb_r, p.hp / p.max_hp, Color(0.62, 0.02, 0.025), _hp_trail, "blood")
 	var rc: Color = p.data.res_color
-	_orb(res_c, orb_r, p.resource / p.res_max, Color(rc.r * 0.75, rc.g * 0.75, rc.b * 0.75), 0.0)
+	_orb(res_c, orb_r, p.resource / p.res_max, Color(rc.r * 0.75, rc.g * 0.75, rc.b * 0.75), 0.0, String(p.data.resource))
 	_center_text(hp_c.x, hp_c.y + 8, "%d" % ceili(p.hp), 26, Color(1, 0.95, 0.9), Game.font_display_bold, 5)
 	_center_text(hp_c.x, hp_c.y + 30, "/ %d" % ceili(p.max_hp), 15, Color(0.85, 0.8, 0.75, 0.8), Game.font_body, 4)
 	_center_text(res_c.x, res_c.y + 8, "%d" % int(p.resource), 26, Color(1, 0.95, 0.9), Game.font_display_bold, 5)
@@ -346,7 +456,7 @@ func _draw_left(p: Player) -> void:
 
 
 func _draw_minimap(vs: Vector2) -> void:
-	if big_map:
+	if big_map or not bool(Game.settings.get("minimap", true)):
 		return
 	var size := 250.0
 	var r := Rect2(vs.x - size - 28, 28, size, size)

@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.3"
+const VERSION := "0.5.4"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -33,6 +33,11 @@ var settings := {
 	"numbers": true,
 	"gore": true,
 	"fullscreen": false,
+	"aim_assist": true,   # controller: aim at the nearest enemy when the right stick is idle
+	"stick_deadzone": 0.25,
+	"minimap": true,
+	"update_check": true,
+	"last_version": "",    # the version whose notes the player has seen
 	"brightness": 1.0,  # gamma of the world, calibrated in Settings
 	"quality": 2,       # 0 Low, 1 Medium, 2 High, 3 Ultra
 	"glow": true,
@@ -104,13 +109,49 @@ var acts_seen := {}
 var look := {"accent": 0, "skin": 0, "hair": 0}
 
 
+signal update_found(version: String, url: String)
+const REPO := "astravail/ashen-crown"
+var update_version := ""
+var update_url := ""
+
+## What changed in each version, newest first. Shown in What's new, and once after every update.
+const RELEASE_NOTES := [
+	{"v": "0.5.4", "items": [
+		"Life is now blood, and each class has its own matter in the other orb: molten cinder, drifting souls, rising flame.",
+		"Blood on the ground is more realistic: dark clotting rims, streaks and a mist of fine drops.",
+		"Controls: rebindable keys and controller buttons, and the same input can no longer be used for two things.",
+		"Health globes drop much less often, as in Diablo.",
+		"What's new now opens after every update, and the game can check for new versions.",
+		"Class and character screens fit their text again."]},
+	{"v": "0.5.3", "items": [
+		"A town portal now stays open in the village and leads back to where you left.",
+		"Brightness calibration in Settings, and a darker picture overall.",
+		"The map starts empty and no longer shows chests or shrines. Find them yourself.",
+		"Rebindable keys and controller buttons, plus more controller settings.",
+		"What's new, and a check for new versions.",
+		"Gear name tags no longer pile on top of each other.",
+		"Ash now drifts on the wind and no longer looks like snow."]},
+	{"v": "0.5.2", "items": ["Runs and victories are no longer shown."]},
+	{"v": "0.5.1", "items": ["Settings scrolls, and Back sits in the top left corner."]},
+	{"v": "0.5.0", "items": [
+		"New graphics: terrain lit in relief, a finishing pass, redrawn heroes, enemies, props and effects.",
+		"Gear is picked up by clicking it, with a green arrow for upgrades and a red one for downgrades.",
+		"Legendaries scale with your level.",
+		"Reset statistics in Settings."]},
+]
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_fonts()
 	_build_theme()
 	_setup_input()
 	load_settings()
+	load_binds()
 	_load_records()
+	apply_settings()
+	if bool(settings.update_check) and not DisplayServer.get_name().begins_with("headless"):
+		check_update.call_deferred()
 
 
 func new_run(cls: String) -> void:
@@ -395,6 +436,8 @@ func apply_preset(q: int) -> void:
 
 
 func apply_settings() -> void:
+	for a in ["move_up", "move_down", "move_left", "move_right"]:
+		InputMap.action_set_deadzone(a, clampf(float(settings.stick_deadzone), 0.05, 0.6))
 	Sfx.set_volumes(settings.master, settings.music, settings.sfx)
 	Engine.max_fps = int(settings.fps_cap)
 	if not DisplayServer.get_name().begins_with("headless"):
@@ -518,26 +561,161 @@ func _input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+## What the player can rebind: [action, label, controller button can be changed]
+const BINDABLE := [
+	["attack_1", "Primary attack", false], ["attack_2", "Secondary attack", false],
+	["skill_1", "Skill 1", true], ["skill_2", "Skill 2", true], ["ultimate", "Ultimate", true],
+	["dodge", "Dodge", true], ["flask", "Potion", true], ["interact", "Interact", true],
+	["inventory", "Inventory", true], ["quests", "Quest log", true], ["skills", "Skill tree", true],
+	["recall", "Town portal", true], ["map", "Map", true],
+	["move_up", "Move up", false], ["move_down", "Move down", false], ["move_left", "Move left", false], ["move_right", "Move right", false],
+]
+## Keys that stay bound whatever the player picks, so a hand is never left without a way to move or pause.
+const KEEP_KEYS := {"move_up": [KEY_UP], "move_down": [KEY_DOWN], "move_left": [KEY_LEFT], "move_right": [KEY_RIGHT], "pause": [KEY_ESCAPE]}
+const BIND_PATH := "user://binds.cfg"
+const PAD_NAMES := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB",
+	JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_BACK: "Back", JOY_BUTTON_START: "Start", JOY_BUTTON_LEFT_STICK: "L3",
+	JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down",
+	JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right"}
+var _default_events := {}
+
+
+## Remembers what each action is bound to as shipped, so the keybind screen can reset to it.
+func _remember_defaults() -> void:
+	if not _default_events.is_empty():
+		return
+	for b in BINDABLE:
+		_default_events[b[0]] = InputMap.action_get_events(b[0]).duplicate()
+
+
+func _is_pad(ev: InputEvent) -> bool:
+	return ev is InputEventJoypadButton or ev is InputEventJoypadMotion
+
+
+func _primary(action: String, pad: bool) -> InputEvent:
+	for ev in InputMap.action_get_events(action):
+		if pad and ev is InputEventJoypadButton:
+			return ev
+		if not pad and (ev is InputEventKey or ev is InputEventMouseButton):
+			return ev
+	return null
+
+
+## Which other action already uses `ev`, or "" if nobody does.
+func bind_conflict(action: String, ev: InputEvent) -> String:
+	var pad := _is_pad(ev)
+	for b in BINDABLE:
+		var other: String = b[0]
+		if other == action:
+			continue
+		var cur := _primary(other, pad)
+		if cur and cur.is_match(ev, true):
+			return String(b[1])
+		if not pad and KEEP_KEYS.has(other) and ev is InputEventKey and KEEP_KEYS[other].has(ev.physical_keycode):
+			return String(b[1])
+	if not pad and ev is InputEventKey and ev.physical_keycode == KEY_ESCAPE:
+		return "Pause"
+	return ""
+
+
+## Rebinds one action. `ev` replaces its keyboard or mouse input, or its controller button.
+## Call bind_conflict first: an input can only belong to one action.
+func rebind(action: String, ev: InputEvent) -> void:
+	_remember_defaults()
+	var pad := _is_pad(ev)
+	for e in InputMap.action_get_events(action):
+		if (pad and e is InputEventJoypadButton) or (not pad and (e is InputEventKey or e is InputEventMouseButton) and not _kept(action, e)):
+			InputMap.action_erase_event(action, e)
+	InputMap.action_add_event(action, ev)
+	save_binds()
+
+
+func _kept(action: String, e: InputEvent) -> bool:
+	return e is InputEventKey and KEEP_KEYS.get(action, []).has(e.physical_keycode)
+
+
+func reset_binds() -> void:
+	_remember_defaults()
+	for action in _default_events.keys():
+		InputMap.action_erase_events(action)
+		for e in _default_events[action]:
+			InputMap.action_add_event(action, e)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(BIND_PATH))
+
+
+func save_binds() -> void:
+	var cfg := ConfigFile.new()
+	for b in BINDABLE:
+		var kb := _primary(b[0], false)
+		if kb is InputEventKey:
+			cfg.set_value("kb", b[0], ["key", kb.physical_keycode])
+		elif kb is InputEventMouseButton:
+			cfg.set_value("kb", b[0], ["mouse", kb.button_index])
+		var pd := _primary(b[0], true)
+		if pd is InputEventJoypadButton:
+			cfg.set_value("pad", b[0], pd.button_index)
+	cfg.save(BIND_PATH)
+
+
+func load_binds() -> void:
+	_remember_defaults()
+	var cfg := ConfigFile.new()
+	if cfg.load(BIND_PATH) != OK:
+		return
+	for b in BINDABLE:
+		var a: String = b[0]
+		if cfg.has_section_key("kb", a):
+			var v: Array = cfg.get_value("kb", a)
+			var ev: InputEvent
+			if v[0] == "key":
+				ev = InputEventKey.new()
+				ev.physical_keycode = int(v[1])
+			else:
+				ev = InputEventMouseButton.new()
+				ev.button_index = int(v[1])
+			for e in InputMap.action_get_events(a):
+				if (e is InputEventKey or e is InputEventMouseButton) and not _kept(a, e):
+					InputMap.action_erase_event(a, e)
+			InputMap.action_add_event(a, ev)
+		if cfg.has_section_key("pad", a):
+			var pe := InputEventJoypadButton.new()
+			pe.button_index = int(cfg.get_value("pad", a))
+			for e in InputMap.action_get_events(a):
+				if e is InputEventJoypadButton:
+					InputMap.action_erase_event(a, e)
+			InputMap.action_add_event(a, pe)
+
+
+## The short name of the input an action is bound to, for the keybind screen and the HUD.
+func input_label(action: String, pad: bool) -> String:
+	var ev := _primary(action, pad)
+	if ev is InputEventKey:
+		var code: int = DisplayServer.keyboard_get_keycode_from_physical(ev.physical_keycode)
+		return OS.get_keycode_string(code).to_upper()
+	if ev is InputEventMouseButton:
+		return {MOUSE_BUTTON_LEFT: "LMB", MOUSE_BUTTON_RIGHT: "RMB", MOUSE_BUTTON_MIDDLE: "MMB"}.get(ev.button_index, "MOUSE %d" % ev.button_index)
+	if ev is InputEventJoypadButton:
+		return PAD_NAMES.get(ev.button_index, "Button %d" % ev.button_index)
+	if pad:
+		return {"attack_1": "RT", "attack_2": "LT"}.get(action, "")
+	return ""
+
+
+## The short name of an input event on its own.
+func input_label_for(ev: InputEvent) -> String:
+	if ev is InputEventKey:
+		return OS.get_keycode_string(DisplayServer.keyboard_get_keycode_from_physical(ev.physical_keycode)).to_upper()
+	if ev is InputEventMouseButton:
+		return {MOUSE_BUTTON_LEFT: "LMB", MOUSE_BUTTON_RIGHT: "RMB", MOUSE_BUTTON_MIDDLE: "MMB"}.get(ev.button_index, "MOUSE %d" % ev.button_index)
+	if ev is InputEventJoypadButton:
+		return PAD_NAMES.get(ev.button_index, "Button %d" % ev.button_index)
+	return ""
+
+
 func key_label(action: String) -> String:
 	if using_gamepad:
-		match action:
-			"attack_1": return "RT"
-			"attack_2": return "LT"
-			"skill_1": return "X"
-			"skill_2": return "Y"
-			"ultimate": return "RB"
-			"dodge": return "A"
-			"flask": return "LB"
-		return ""
-	match action:
-		"attack_1": return "LMB"
-		"attack_2": return "RMB"
-		"skill_1": return "Q"
-		"skill_2": return "E"
-		"ultimate": return "R"
-		"dodge": return "SPACE"
-		"flask": return "F"
-	return ""
+		return input_label(action, true)
+	return input_label(action, false)
 
 
 # ------------------------------------------------------------------ look
@@ -816,3 +994,36 @@ func save_lifetime() -> void:
 	var f := FileAccess.open(LIFETIME_PATH, FileAccess.WRITE)
 	if f:
 		f.store_var(_life(), false)
+
+
+# ------------------------------------------------------------------ updates
+
+## Asks GitHub for the newest release. Nothing about the player is sent, and it can be switched off.
+func check_update() -> void:
+	var req := HTTPRequest.new()
+	req.timeout = 8.0
+	add_child(req)
+	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray):
+		req.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			return
+		var data: Variant = JSON.parse_string(body.get_string_from_utf8())
+		if not data is Dictionary:
+			return
+		var tag := String(data.get("tag_name", "")).trim_prefix("v")
+		if tag != "" and _newer(tag, VERSION):
+			update_version = tag
+			update_url = String(data.get("html_url", "https://github.com/%s/releases" % REPO))
+			update_found.emit(update_version, update_url))
+	req.request("https://api.github.com/repos/%s/releases/latest" % REPO, PackedStringArray(["User-Agent: AshenCrown", "Accept: application/vnd.github+json"]))
+
+
+static func _newer(a: String, b: String) -> bool:
+	var pa := a.split(".")
+	var pb := b.split(".")
+	for i in 3:
+		var x := int(pa[i]) if i < pa.size() else 0
+		var y := int(pb[i]) if i < pb.size() else 0
+		if x != y:
+			return x > y
+	return false

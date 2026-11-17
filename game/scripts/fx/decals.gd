@@ -75,8 +75,22 @@ func add_blood(p: Vector2, r: float, dir: Vector2, c: Color, pool := false) -> v
 		# the bigger drops skip once more where they land
 		if s > r * 0.2:
 			drops.append(_oval(p + off + off.normalized() * s * 1.8, s * 0.45, s * 0.3))
+	# thin streaks thrown along the blow and a fine mist of tiny drops past them
+	var streaks := PackedVector2Array()
+	for i in randi_range(3, 7):
+		var ang := dir.rotated(randf_range(-0.5, 0.5))
+		var a0 := p + ang * r * randf_range(0.4, 0.9) * Vector2(1.0, 0.55)
+		var a1 := a0 + ang * r * randf_range(0.8, 2.2) * Vector2(1.0, 0.55)
+		streaks.append(a0)
+		streaks.append(a1)
+	var mist: Array[Rect2] = []
+	for i in randi_range(6, 14):
+		var off2 := dir.rotated(randf_range(-0.9, 0.9)) * r * randf_range(1.0, 3.4)
+		off2.y *= 0.55
+		var s2 := randf_range(0.8, 2.2)
+		mist.append(_oval(p + off2, s2, s2 * 0.7))
 	var life := 90.0 if pool else 45.0
-	items.append({"type": 2, "pos": p, "r": r, "body": body, "drops": drops, "c": c, "t": life, "max": life, "pool": pool,
+	items.append({"type": 2, "pos": p, "r": r, "body": body, "drops": drops, "streaks": streaks, "mist": mist, "c": c, "t": life, "max": life, "pool": pool,
 		"soak": _oval(p, r * 1.4, r * 0.8), "deep": _oval(p, r * 0.7, r * 0.4), "gloss": _oval(p + Vector2(-r * 0.22, -r * 0.13), r * 0.34, r * 0.16)})
 	_trim()
 
@@ -156,6 +170,10 @@ func _draw() -> void:
 			if d.pool:
 				# what has soaked into the ground around it
 				draw_texture_rect(soft, d.soak, false, Color(wet.r * 0.4, wet.g * 0.4, wet.b * 0.4, 0.5 * a))
+			# a darker, clotting rim round the edge, then the wet body on top
+			var rim := Color(wet.r * 0.5, wet.g * 0.45, wet.b * 0.45, wet.a)
+			for q: Rect2 in d.body:
+				draw_texture_rect(_blot, q.grow(1.6), false, rim)
 			for q: Rect2 in d.body:
 				draw_texture_rect(_blot, q, false, wet)
 			# deepest, and so darkest, in the middle
@@ -164,6 +182,14 @@ func _draw() -> void:
 				draw_texture_rect(soft, d.gloss, false, Color(1, 0.75, 0.7, 0.4 * (1.0 - age / 0.3) * a))
 			for q: Rect2 in d.drops:
 				draw_texture_rect(_blot, q, false, wet)
+			if d.has("streaks"):
+				draw_multiline(d.streaks, Color(wet.r, wet.g, wet.b, wet.a * 0.9), 2.2, true)
+				for q: Rect2 in d.mist:
+					draw_texture_rect(_blot, q, false, wet)
+			# fresh blood catches the light along its upper edge
+			if age < 0.45:
+				for q: Rect2 in d.body:
+					draw_texture_rect(soft, Rect2(q.position.x + q.size.x * 0.2, q.position.y + q.size.y * 0.1, q.size.x * 0.4, q.size.y * 0.22), false, Color(1, 0.7, 0.65, 0.22 * (1.0 - age / 0.45) * a))
 		elif d.type == 3:
 			var c3: Color = d.c
 			draw_texture_rect(soft, d.stain, false, Color(c3.r * 0.35, c3.g * 0.3, c3.b * 0.3, 0.55 * a))

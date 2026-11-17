@@ -160,6 +160,9 @@ func show_title() -> void:
 	var stats_b := _button("Statistics", show_statistics)
 	stats_b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	v.add_child(stats_b)
+	var news_b := _button("What's new", func(): show_whats_new(show_title))
+	news_b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	v.add_child(news_b)
 	var hall := _button("Hall of the Fallen", show_fallen)
 	hall.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	v.add_child(hall)
@@ -171,14 +174,27 @@ func show_title() -> void:
 	var q := _button("Quit", func(): get_tree().quit())
 	q.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	v.add_child(q)
-	for b in [first, s, stats_b, hall, online, q]:
+	for b in [first, s, stats_b, news_b, hall, online, q]:
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(fill)
 	var foot := "v%s" % Game.VERSION
+	if Game.update_version != "":
+		var up := _button("Update available: v%s  ·  download" % Game.update_version, func(): OS.shell_open(Game.update_url), 420.0, 40.0)
+		up.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		up.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		v.add_child(up)
 	v.add_child(_label(foot, Game.font_body, 18, Color(0.5, 0.47, 0.44)))
 	_focus_first(first)
+	# once after every update: what changed
+	if str(Game.settings.last_version) != Game.VERSION and not _news_checked:
+		_news_checked = true
+		if str(Game.settings.last_version) != "" or not Game.list_characters().is_empty():
+			show_whats_new(show_title)
+		else:
+			Game.settings.last_version = Game.VERSION
+			Game.save_settings()
 
 
 # ---------------------------------------------------------------- class select
@@ -258,7 +274,7 @@ func _card_button(w: float, h: float) -> Button:
 
 func _class_card(id: String) -> Button:
 	var d: Dictionary = Data.CLASSES[id]
-	var b := _card_button(400, 690)
+	var b := _card_button(400, 770)
 	var locked := not Game.class_unlocked(id)
 	b.pressed.connect(func():
 		if locked:
@@ -281,7 +297,7 @@ func _class_card(id: String) -> Button:
 	m.add_child(v)
 	var port := Portrait.new()
 	port.cls = id
-	port.custom_minimum_size = Vector2(0, 200)
+	port.custom_minimum_size = Vector2(0, 190)
 	port.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(port)
 	v.add_child(_label(String(d.name).to_upper(), Game.font_display_bold, 30, Color(0.97, 0.88, 0.76), HORIZONTAL_ALIGNMENT_CENTER))
@@ -318,6 +334,7 @@ func _class_card(id: String) -> Button:
 		b.modulate = Color(0.55, 0.55, 0.6)
 		v.add_child(_label("LOCKED", Game.font_display_bold, 20, Color(1.0, 0.55, 0.3), HORIZONTAL_ALIGNMENT_CENTER))
 	var res := _wrap(_label("%s. %s" % [d.resource, d.resource_hint], Game.font_body, 16, Color(0.6, 0.57, 0.54), HORIZONTAL_ALIGNMENT_CENTER))
+	res.custom_minimum_size = Vector2(0, 44)
 	v.add_child(res)
 	return b
 
@@ -335,10 +352,12 @@ func show_customize(cls: String) -> void:
 	v.add_child(row)
 	var port := Portrait.new()
 	port.cls = cls
-	port.custom_minimum_size = Vector2(300, 330)
+	port.custom_minimum_size = Vector2(300, 300)
+	port.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	port.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(port)
 	var form := VBoxContainer.new()
+	form.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	form.add_theme_constant_override("separation", 14)
 	row.add_child(form)
 	form.add_child(_label(String(Data.CLASSES[cls].name).to_upper() + "  ·  " + Data.CLASSES[cls].role, Game.font_display, 18, Game.C_GOLD))
@@ -410,6 +429,184 @@ func show_customize(cls: String) -> void:
 		start_run.emit(cls), 300)
 	bh.add_child(go)
 	_focus_first(go)
+
+
+# ---------------------------------------------------------------- what's new
+
+func show_whats_new(back: Callable) -> void:
+	Game.settings.last_version = Game.VERSION
+	Game.save_settings()
+	var c := _root(0.8)
+	var m := MarginContainer.new()
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 36)
+	c.add_child(m)
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 12)
+	m.add_child(page)
+	var head := HBoxContainer.new()
+	page.add_child(head)
+	var back_b := _button("◀  Back", back, 170.0, 46.0)
+	head.add_child(back_b)
+	var title := _label("WHAT'S NEW", Game.font_display_bold, 40, Color(0.95, 0.86, 0.74), HORIZONTAL_ALIGNMENT_CENTER)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var balance := Control.new()
+	balance.custom_minimum_size = Vector2(170, 0)
+	head.add_child(balance)
+	page.add_child(_rule(320))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.add_child(scroll)
+	var cc := CenterContainer.new()
+	cc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(cc)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 10)
+	list.custom_minimum_size = Vector2(760, 0)
+	cc.add_child(list)
+	for rel in Game.RELEASE_NOTES:
+		list.add_child(_label("VERSION %s" % rel.v + ("   ·   current" if rel.v == Game.VERSION else ""), Game.font_display_bold, 22, Game.C_GOLD))
+		for line in rel.items:
+			var l := _wrap(_label("•  " + String(line), Game.font_body, 20, Color(0.86, 0.82, 0.76)))
+			l.custom_minimum_size = Vector2(760, 0)
+			list.add_child(l)
+		var gap := Control.new()
+		gap.custom_minimum_size = Vector2(0, 14)
+		list.add_child(gap)
+	_focus_first(back_b)
+
+
+# ---------------------------------------------------------------- keybinds
+
+var _capture: Node
+
+class Capture extends Node:
+	var done: Callable
+	var action := ""
+	var pad := false
+	func _input(event: InputEvent) -> void:
+		var ev: InputEvent = null
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ESCAPE:
+				get_viewport().set_input_as_handled()
+				done.call(null)
+				return
+			if not pad:
+				ev = InputEventKey.new()
+				ev.physical_keycode = event.physical_keycode
+		elif event is InputEventMouseButton and event.pressed and not pad:
+			ev = InputEventMouseButton.new()
+			ev.button_index = event.button_index
+		elif event is InputEventJoypadButton and event.pressed and pad:
+			ev = InputEventJoypadButton.new()
+			ev.button_index = event.button_index
+		if ev:
+			get_viewport().set_input_as_handled()
+			done.call(ev)
+
+
+func show_keybinds(back: Callable) -> void:
+	var c := _root(0.8)
+	var m := MarginContainer.new()
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 36)
+	c.add_child(m)
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 12)
+	m.add_child(page)
+	var head := HBoxContainer.new()
+	page.add_child(head)
+	var back_b := _button("◀  Back", func():
+		_end_capture()
+		back.call(), 170.0, 46.0)
+	head.add_child(back_b)
+	var title := _label("CONTROLS", Game.font_display_bold, 40, Color(0.95, 0.86, 0.74), HORIZONTAL_ALIGNMENT_CENTER)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var reset_b := _button("Reset all", func():
+		Game.reset_binds()
+		show_keybinds(back), 170.0, 46.0)
+	head.add_child(reset_b)
+	page.add_child(_rule(320))
+	var hint := _label("Click a key to change it, then press the new key or button. Esc cancels.", Game.font_italic, 18, Color(0.6, 0.56, 0.52), HORIZONTAL_ALIGNMENT_CENTER)
+	page.add_child(hint)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	page.add_child(scroll)
+	var cc := CenterContainer.new()
+	cc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(cc)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 30)
+	grid.add_theme_constant_override("v_separation", 8)
+	cc.add_child(grid)
+	grid.add_child(_label("", Game.font_body, 18, Game.C_TEXT))
+	grid.add_child(_label("KEYBOARD AND MOUSE", Game.font_display, 14, Color(0.6, 0.56, 0.52), HORIZONTAL_ALIGNMENT_CENTER))
+	grid.add_child(_label("CONTROLLER", Game.font_display, 14, Color(0.6, 0.56, 0.52), HORIZONTAL_ALIGNMENT_CENTER))
+	var first: Control
+	for b in Game.BINDABLE:
+		var action: String = b[0]
+		grid.add_child(_label(b[1], Game.font_body, 21, Game.C_TEXT))
+		var kb := _button(Game.input_label(action, false), func(): pass, 220.0, 38.0)
+		kb.pressed.connect(func(): _begin_capture(kb, action, false, back))
+		grid.add_child(kb)
+		var pb := _button(Game.input_label(action, true), func(): pass, 220.0, 38.0)
+		if bool(b[2]):
+			pb.pressed.connect(func(): _begin_capture(pb, action, true, back))
+		else:
+			pb.disabled = true
+		grid.add_child(pb)
+		if first == null:
+			first = kb
+	_focus_first(first)
+
+
+func _begin_capture(btn: Button, action: String, pad: bool, back: Callable) -> void:
+	_end_capture()
+	btn.text = "Press a button…" if pad else "Press a key…"
+	var cap := Capture.new()
+	cap.action = action
+	cap.pad = pad
+	cap.done = func(ev: Variant):
+		_end_capture()
+		var clash := ""
+		if ev != null:
+			clash = Game.bind_conflict(action, ev)
+			if clash == "":
+				Game.rebind(action, ev)
+		show_keybinds(back)
+		if clash != "":
+			_bind_warning("%s is already used by %s. Pick another, or change that one first." % [Game.input_label_for(ev), clash])
+	_capture = cap
+	add_child(cap)
+
+
+func _bind_warning(text: String) -> void:
+	var l := _label(text, Game.font_body_bold, 20, Color(1.0, 0.45, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
+	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	l.offset_top = -90
+	l.offset_bottom = -50
+	l.offset_left = -500
+	l.offset_right = 500
+	current.add_child(l)
+	Sfx.play("ui_move", -2.0, 0.0, 0.6)
+	var tw := create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tw.tween_interval(3.0)
+	tw.tween_property(l, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(l.queue_free)
+
+
+func _end_capture() -> void:
+	if _capture and is_instance_valid(_capture):
+		_capture.queue_free()
+	_capture = null
 
 
 # ---------------------------------------------------------------- settings
@@ -873,7 +1070,7 @@ func _settings_extra(grid: GridContainer) -> void:
 	opt.call("Frame limit", ["Unlimited", "30", "60", "120", "144"], maxi(0, [0, 30, 60, 120, 144].find(int(Game.settings.fps_cap))), func(i: int):
 		Game.settings.fps_cap = [0, 30, 60, 120, 144][i]
 		Game.apply_settings())
-	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"], ["Tutorial tips", "tutorials"]]:
+	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"], ["Tutorial tips", "tutorials"], ["Show minimap", "minimap"], ["Controller aim assist", "aim_assist"], ["Check for updates", "update_check"]]:
 		grid.add_child(_label(pair[0], Game.font_body, 22, Game.C_TEXT))
 		var cb := CheckButton.new()
 		cb.button_pressed = bool(Game.settings[pair[1]])
@@ -890,6 +1087,22 @@ func _settings_extra(grid: GridContainer) -> void:
 		Game.settings.tutorials = true
 		Sfx.play("ui_move", -8.0, 0.0), 220.0, 36.0)
 	grid.add_child(rb)
+	grid.add_child(_label("Stick dead zone", Game.font_body, 22, Game.C_TEXT))
+	var dz := HSlider.new()
+	dz.min_value = 0.05
+	dz.max_value = 0.5
+	dz.step = 0.025
+	dz.value = float(Game.settings.stick_deadzone)
+	dz.custom_minimum_size = Vector2(340, 28)
+	dz.scrollable = false
+	dz.value_changed.connect(func(val: float):
+		Game.settings.stick_deadzone = val
+		Game.apply_settings())
+	grid.add_child(dz)
+	grid.add_child(_label("Keys and buttons", Game.font_body, 22, Game.C_TEXT))
+	grid.add_child(_button("Controls…", func():
+		Game.save_settings()
+		show_keybinds(func(): show_settings(_settings_back)), 220.0, 36.0))
 	grid.add_child(_label("Statistics", Game.font_body, 22, Game.C_TEXT))
 	var armed := [false]
 	var reset_b: Button
@@ -957,6 +1170,7 @@ func show_permadeath(zone_name: String) -> void:
 # ---------------------------------------------------------------- saved characters
 
 var _delete_arm := ""
+var _news_checked := false
 
 
 func show_characters() -> void:
