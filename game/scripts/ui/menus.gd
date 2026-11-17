@@ -14,12 +14,13 @@ signal ending_chosen(choice: String)
 signal to_title
 
 var current: Control
+var tutorial: Tutorial
 var _settings_back: Callable
 var _keys: Array[Button] = []
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = Game.theme
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -50,12 +51,12 @@ func _unhandled_input(event: InputEvent) -> void:
 func _root(dim := 0.0) -> Control:
 	clear()
 	var c := Control.new()
-	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(c)
 	if dim > 0.0:
 		var bg := ColorRect.new()
 		bg.color = Color(0.02, 0.015, 0.015, dim)
-		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		c.add_child(bg)
 	current = c
 	c.modulate.a = 0.0
@@ -93,7 +94,7 @@ func _button(text: String, cb: Callable, min_w := 360.0, min_h := 58.0) -> Butto
 
 func _center_box(parent: Control, sep := 14) -> VBoxContainer:
 	var cc := CenterContainer.new()
-	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(cc)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", sep)
@@ -128,13 +129,13 @@ func show_title() -> void:
 	gt.fill_to = Vector2(1, 0)
 	var tr := TextureRect.new()
 	tr.texture = gt
-	tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	tr.stretch_mode = TextureRect.STRETCH_SCALE
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.add_child(tr)
 
 	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 150)
 	margin.add_theme_constant_override("margin_top", 120)
 	margin.add_theme_constant_override("margin_bottom", 70)
@@ -195,7 +196,7 @@ func show_class_select() -> void:
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(h)
 	var first: Button
-	for id in ["knight", "gravecaller", "pyrewitch"]:
+	for id in ["knight", "gravecaller", "pyrewitch", "crownbearer"]:
 		var card := _class_card(id)
 		h.add_child(card)
 		if first == null:
@@ -204,6 +205,30 @@ func show_class_select() -> void:
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(back)
 	_focus_first(first)
+
+
+func _show_locked_class(id: String) -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	current.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.add_child(cc)
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", Ornate.box("panel"))
+	cc.add_child(pc)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	pc.add_child(v)
+	v.add_child(_label(String(Data.CLASSES[id].name).to_upper() + "  ·  LOCKED", Game.font_display_bold, 30, Game.C_GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+	var t := _wrap(_label(Data.CLASSES[id].unlock_hint, Game.font_body, 21, Color(0.85, 0.8, 0.75), HORIZONTAL_ALIGNMENT_CENTER))
+	t.custom_minimum_size = Vector2(560, 0)
+	v.add_child(t)
+	var ok := _button("Understood", func(): dim.queue_free(), 220)
+	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(ok)
+	ok.grab_focus()
 
 
 func _card_style(border: Color, bg := Color(0.06, 0.05, 0.048, 0.96)) -> StyleBoxFlat:
@@ -225,10 +250,10 @@ func _card_button(w: float, h: float) -> Button:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(w, h)
 	b.focus_mode = Control.FOCUS_ALL
-	b.add_theme_stylebox_override("normal", _card_style(Color(0.26, 0.22, 0.19)))
-	b.add_theme_stylebox_override("hover", _card_style(Game.C_EMBER, Color(0.09, 0.065, 0.05, 0.97)))
-	b.add_theme_stylebox_override("focus", _card_style(Game.C_EMBER, Color(0.09, 0.065, 0.05, 0.97)))
-	b.add_theme_stylebox_override("pressed", _card_style(Game.C_EMBER_HOT, Color(0.14, 0.08, 0.05, 1.0)))
+	b.add_theme_stylebox_override("normal", Ornate.box("card"))
+	b.add_theme_stylebox_override("hover", Ornate.box("card_hot"))
+	b.add_theme_stylebox_override("focus", Ornate.box("card_hot"))
+	b.add_theme_stylebox_override("pressed", Ornate.box("card_press"))
 	b.mouse_entered.connect(func(): b.grab_focus())
 	b.focus_entered.connect(func(): Sfx.play("ui_move", -12.0, 0.0))
 	return b
@@ -236,12 +261,17 @@ func _card_button(w: float, h: float) -> Button:
 
 func _class_card(id: String) -> Button:
 	var d: Dictionary = Data.CLASSES[id]
-	var b := _card_button(440, 690)
+	var b := _card_button(400, 690)
+	var locked := not Game.class_unlocked(id)
 	b.pressed.connect(func():
+		if locked:
+			Sfx.play("ui_move", -4.0, 0.0)
+			_show_locked_class(id)
+			return
 		Sfx.play("ui_select", -4.0, 0.0)
 		show_customize(id))
 	var m := MarginContainer.new()
-	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right"]:
 		m.add_theme_constant_override("margin_" + side, 30)
 	m.add_theme_constant_override("margin_top", 20)
@@ -258,7 +288,7 @@ func _class_card(id: String) -> Button:
 	port.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(port)
 	v.add_child(_label(String(d.name).to_upper(), Game.font_display_bold, 30, Color(0.97, 0.88, 0.76), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_label(d.role, Game.font_display, 16, Color(0.85, 0.55, 0.3), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_label(d.role, Game.font_display, 16, Game.C_GOLD, HORIZONTAL_ALIGNMENT_CENTER))
 	var blurb := _wrap(_label(d.blurb, Game.font_italic, 19, Color(0.72, 0.68, 0.64), HORIZONTAL_ALIGNMENT_CENTER))
 	blurb.custom_minimum_size = Vector2(0, 76)
 	v.add_child(blurb)
@@ -285,8 +315,11 @@ func _class_card(id: String) -> Button:
 		var key := _label(Game.key_label(a.action), Game.font_display_bold, 13, Color(0.6, 0.55, 0.5))
 		key.custom_minimum_size = Vector2(62, 0)
 		row.add_child(key)
-		row.add_child(_label(a.name, Game.font_body_bold, 18, Color(0.88, 0.82, 0.75) if a.action != "ultimate" else Color(1.0, 0.7, 0.4)))
+		row.add_child(_label(a.name, Game.font_body_bold, 18, Color(0.88, 0.82, 0.75) if a.action != "ultimate" else Game.C_GOLD))
 		v.add_child(row)
+	if locked:
+		b.modulate = Color(0.55, 0.55, 0.6)
+		v.add_child(_label("LOCKED", Game.font_display_bold, 20, Color(1.0, 0.55, 0.3), HORIZONTAL_ALIGNMENT_CENTER))
 	var res := _wrap(_label("%s. %s" % [d.resource, d.resource_hint], Game.font_body, 16, Color(0.6, 0.57, 0.54), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(res)
 	return b
@@ -311,7 +344,7 @@ func show_customize(cls: String) -> void:
 	var form := VBoxContainer.new()
 	form.add_theme_constant_override("separation", 14)
 	row.add_child(form)
-	form.add_child(_label(String(Data.CLASSES[cls].name).to_upper() + "  ·  " + Data.CLASSES[cls].role, Game.font_display, 18, Color(0.85, 0.55, 0.3)))
+	form.add_child(_label(String(Data.CLASSES[cls].name).to_upper() + "  ·  " + Data.CLASSES[cls].role, Game.font_display, 18, Game.C_GOLD))
 	form.add_child(_label("Name", Game.font_body, 20, Color(0.65, 0.61, 0.57)))
 	var name_edit := LineEdit.new()
 	name_edit.text = Game.hero_name if Game.hero_name != "Nameless" else ""
@@ -347,7 +380,7 @@ func show_customize(cls: String) -> void:
 	var dl := _label("Difficulty", Game.font_body, 20, Color(0.65, 0.61, 0.57))
 	dl.custom_minimum_size = Vector2(110, 0)
 	dh.add_child(dl)
-	var dval := _label("", Game.font_display_bold, 20, Color(1.0, 0.75, 0.45))
+	var dval := _label("", Game.font_display_bold, 20, Game.C_GOLD)
 	dval.custom_minimum_size = Vector2(250, 0)
 	var dupd := func(): dval.text = "%d / %d  %s" % [Game.difficulty + 1, Game.DIFFICULTIES.size(), Game.diff().name]
 	dupd.call()
@@ -442,7 +475,7 @@ func show_pause() -> void:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 120)
 	var cc := CenterContainer.new()
-	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(cc)
 	cc.add_child(h)
 	var v := VBoxContainer.new()
@@ -519,7 +552,7 @@ func show_levelup(level: int, choices: Array) -> void:
 
 func _card_inner(b: Button) -> VBoxContainer:
 	var m := MarginContainer.new()
-	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right", "top", "bottom"]:
 		m.add_theme_constant_override("margin_" + side, 26 if side != "top" else 30)
@@ -692,8 +725,9 @@ class Logo extends Control:
 	func _draw() -> void:
 		var f := Game.font_display_bold
 		var c := Vector2(150, 92)
-		draw_circle(c, 110, Color(1.0, 0.4, 0.1, 0.06 + 0.02 * sin(t * 1.5)), true, -1.0, true)
-		Icons.crown(self, c, 170.0, Color(0.95, 0.55, 0.22), Color(1.6, 0.9, 0.4))
+		draw_circle(c, 130, Color(0.8, 0.08, 0.04, 0.10 + 0.03 * sin(t * 1.5)), true, -1.0, true)
+		draw_circle(c, 80, Color(1.0, 0.3, 0.08, 0.08 + 0.03 * sin(t * 2.1)), true, -1.0, true)
+		Icons.crown(self, c, 170.0, Color(0.88, 0.7, 0.36), Color(1.8, 0.35, 0.12))
 		for i in 6:
 			var ph := fmod(t * 0.35 + i * 0.37, 1.0)
 			var x := c.x - 70 + i * 28 + sin(t + i) * 6.0
@@ -702,10 +736,14 @@ class Logo extends Control:
 		var title := "ASHEN CROWN"
 		var fs := 96
 		var pos := Vector2(0, 268)
-		draw_string_outline(f, pos, title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 10, Color(0, 0, 0, 0.6))
-		draw_string(f, pos, title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.95, 0.88, 0.8))
+		draw_string_outline(f, pos, title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 14, Color(0, 0, 0, 0.85))
+		draw_string(f, pos + Vector2(3, 4), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.5, 0.04, 0.03))
+		draw_string(f, pos, title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.93, 0.78, 0.46))
+		draw_string(f, pos + Vector2(0, -2), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.95, 0.75, 0.25))
 		var w := f.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_line(Vector2(0, pos.y + 22), Vector2(w, pos.y + 22), Color(0.85, 0.45, 0.18, 0.9), 2.0)
+		draw_line(Vector2(0, pos.y + 22), Vector2(w, pos.y + 22), Color(0.72, 0.1, 0.07, 0.95), 3.0)
+		draw_line(Vector2(0, pos.y + 27), Vector2(w, pos.y + 27), Color(0.8, 0.62, 0.3, 0.8), 1.0)
+		draw_circle(Vector2(w * 0.5, pos.y + 24), 5.0, Color(0.88, 0.7, 0.36))
 
 
 class Portrait extends Control:
@@ -751,7 +789,7 @@ func _settings_extra(grid: GridContainer) -> void:
 	opt.call("Frame limit", ["Unlimited", "30", "60", "120", "144"], maxi(0, [0, 30, 60, 120, 144].find(int(Game.settings.fps_cap))), func(i: int):
 		Game.settings.fps_cap = [0, 30, 60, 120, 144][i]
 		Game.apply_settings())
-	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"]]:
+	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"], ["Tutorial tips", "tutorials"]]:
 		grid.add_child(_label(pair[0], Game.font_body, 22, Game.C_TEXT))
 		var cb := CheckButton.new()
 		cb.button_pressed = bool(Game.settings[pair[1]])
@@ -761,6 +799,13 @@ func _settings_extra(grid: GridContainer) -> void:
 			Game.apply_settings()
 			Sfx.play("ui_move", -8.0, 0.0))
 		grid.add_child(cb)
+	grid.add_child(_label("Tutorials seen", Game.font_body, 22, Game.C_TEXT))
+	var rb := _button("Show all tips again", func():
+		if tutorial:
+			tutorial.reset_seen()
+		Game.settings.tutorials = true
+		Sfx.play("ui_move", -8.0, 0.0), 220.0, 36.0)
+	grid.add_child(rb)
 	opt.call("FPS counter corner", ["Top left", "Top right", "Bottom left", "Bottom right"], int(Game.settings.fps_corner), func(i: int):
 		Game.settings.fps_corner = i)
 	if Game.in_run:
@@ -768,7 +813,7 @@ func _settings_extra(grid: GridContainer) -> void:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		grid.add_child(h)
-		var val := _label("", Game.font_display_bold, 20, Color(1.0, 0.75, 0.45))
+		var val := _label("", Game.font_display_bold, 20, Game.C_GOLD)
 		val.custom_minimum_size = Vector2(210, 0)
 		var upd := func(): val.text = "%d / %d  %s" % [Game.difficulty + 1, Game.DIFFICULTIES.size(), Game.diff().name]
 		upd.call()
@@ -1026,8 +1071,8 @@ func show_statistics() -> void:
 				right.add_child(h)
 			var cls_rows: Array = []
 			var pc: Dictionary = life.get("playtime_class", {})
-			for cid in ["knight", "gravecaller", "pyrewitch"]:
-				cls_rows.append([Data.CLASSES[cid].name, _n(pc, cid) / 60.0, Color(0.85, 0.5, 0.25)])
+			for cid in ["knight", "gravecaller", "pyrewitch", "crownbearer"]:
+				cls_rows.append([Data.CLASSES[cid].name, _n(pc, cid) / 60.0, Game.C_GOLD])
 			right.add_child(_chart("Time per class", cls_rows, 110, " min"))
 			body.add_child(right)
 		1:

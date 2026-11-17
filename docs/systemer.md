@@ -58,3 +58,15 @@ Spilleren kan knuse kronen eller bli den nye Askekongen.
 - Voice lines bruker systemets talesyntese hvis den finnes (`speech-dispatcher` og `espeak-ng`). Uten den bruker spillet en egen formantsyntese med egen stemme per karakter og klasse. Den er et stemmemurmel, ikke tale. Ekte innspilte replikker kan legges inn i `Voice.speak()`.
 - Cutscenes er malte, animerte scener tegnet fra former: brennende by, kongen med kronen, én scene per act og kongen før bosskampen.
 - Hver variant av en fiende har eget tilbehør og animasjon (horn, vinger, klokker, flammer, hjelmlykter, magmasprekker) på toppen av grunnformen. Se `enemy_looks.gd`.
+
+## Tutorials (0.4.0)
+
+`scripts/ui/tutorial.gd`. Små kort med animert demo, tittel og forklaring dukker opp første gang en situasjon oppstår (bevegelse, første fiende, loot, kiste, waypoint, osv.). De pauser ikke spillet. Enter lukker kortet. Av/på og «Show all tips again» ligger i Settings (`settings.tutorials`, `settings.tut_seen`). Nye tips legges i `Tutorial.TIPS`, en demo i `TutDemo._d_<navn>`, og utløseren i `Tutorial._scan()`.
+
+## Crownbearer (0.4.0)
+
+Femte klasse, låst til man har fullført historien én gang (`Game.class_unlocked`, `records.wins`). Vises i karattervalget med forklaring når man prøver å velge den. Tallene står i `Data.CLASSES.crownbearer` og i `Player.dmg_mult/cd_rate`.
+
+## Tema (0.4.0)
+
+Diablo-inspirert: blodrød og gammelt gull på sverted stein. Rammer lages prosedyrisk i `scripts/ui/ornate.gd` og brukes av temaet, kortene og HUD.

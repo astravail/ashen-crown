@@ -16,7 +16,7 @@ var _map_scale := 1.0
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
@@ -101,8 +101,17 @@ func _orb(center: Vector2, r: float, ratio: float, col: Color, trail: float) -> 
 	_liquid(center, r, ratio, col)
 	# Glass highlight
 	draw_arc(center + Vector2(-r * 0.12, -r * 0.12), r * 0.72, PI * 1.05, PI * 1.45, 20, Color(1, 1, 1, 0.08), r * 0.12, true)
-	draw_arc(center, r + 3.5, 0.0, TAU, 64, Color(0.42, 0.33, 0.24), 2.0, true)
-	draw_arc(center, r + 7.0, 0.0, TAU, 64, Color(0.12, 0.1, 0.09), 1.5, true)
+	# Gothic bronze ring with a lit upper-left edge and rivets.
+	draw_arc(center, r + 5.0, 0.0, TAU, 72, Color(0.02, 0.015, 0.012), 9.0, true)
+	draw_arc(center, r + 5.0, 0.0, TAU, 72, Ornate.GOLD_LO, 6.0, true)
+	draw_arc(center, r + 5.0, PI * 0.8, PI * 1.75, 40, Ornate.GOLD_HI, 4.0, true)
+	draw_arc(center, r + 5.0, PI * 1.75, PI * 2.2, 20, Ornate.GOLD_MID, 4.0, true)
+	draw_arc(center, r + 5.0, PI * 0.2, PI * 0.8, 20, Ornate.GOLD_MID, 3.0, true)
+	for i in 8:
+		var a := TAU * float(i) / 8.0 + 0.39
+		var q := center + Vector2(cos(a), sin(a)) * (r + 5.0)
+		draw_circle(q, 3.2, Color(0.04, 0.03, 0.02), true, -1.0, true)
+		draw_circle(q, 2.2, Ornate.GOLD_HI.lerp(Ornate.GOLD_LO, 0.5 + 0.5 * sin(a)), true, -1.0, true)
 
 
 func _liquid(center: Vector2, r: float, ratio: float, col: Color) -> void:
@@ -139,13 +148,16 @@ func _draw_bottom(vs: Vector2, p: Player) -> void:
 	var by := vs.y - 48.0
 	# Backplate
 	var plate := PackedVector2Array([Vector2(cx - 420, by + 26), Vector2(cx - 400, by - 74), Vector2(cx + 400, by - 74), Vector2(cx + 420, by + 26)])
-	draw_colored_polygon(plate, Color(0.035, 0.03, 0.03, 0.85))
-	draw_line(Vector2(cx - 400, by - 74), Vector2(cx + 400, by - 74), Color(0.36, 0.28, 0.2, 0.9), 1.5)
+	draw_colored_polygon(plate, Color(0.045, 0.038, 0.036, 0.94))
+	draw_line(Vector2(cx - 400, by - 74), Vector2(cx + 400, by - 74), Ornate.GOLD_HI, 3.0)
+	draw_line(Vector2(cx - 400, by - 70), Vector2(cx + 400, by - 70), Color(0.45, 0.07, 0.05, 0.9), 2.0)
+	draw_line(Vector2(cx - 420, by + 26), Vector2(cx - 400, by - 74), Ornate.GOLD_MID, 3.0)
+	draw_line(Vector2(cx + 420, by + 26), Vector2(cx + 400, by - 74), Ornate.GOLD_LO, 3.0)
 	# Orbs
 	var orb_r := 70.0
 	var hp_c := Vector2(cx - 500, vs.y - 118)
 	var res_c := Vector2(cx + 500, vs.y - 118)
-	_orb(hp_c, orb_r, p.hp / p.max_hp, Color(0.62, 0.07, 0.05), _hp_trail)
+	_orb(hp_c, orb_r, p.hp / p.max_hp, Color(0.78, 0.05, 0.04), _hp_trail)
 	var rc: Color = p.data.res_color
 	_orb(res_c, orb_r, p.resource / p.res_max, Color(rc.r * 0.75, rc.g * 0.75, rc.b * 0.75), 0.0)
 	_center_text(hp_c.x, hp_c.y + 8, "%d" % ceili(p.hp), 26, Color(1, 0.95, 0.9), Game.font_display_bold, 5)
@@ -195,6 +207,18 @@ func _draw_bottom(vs: Vector2, p: Player) -> void:
 	draw_rect(Rect2(cx - xw * 0.5, vs.y - 6, xw * p.xp / p.xp_next, 3), Color(0.85, 0.6, 0.3))
 
 
+## Beveled bronze frame around a dark socket.
+func _frame(r: Rect2) -> void:
+	draw_rect(r.grow(4.0), Color(0.01, 0.008, 0.008))
+	draw_rect(r.grow(3.0), Ornate.GOLD_LO)
+	draw_rect(Rect2(r.position - Vector2(3, 3), Vector2(r.size.x + 6, 2)), Ornate.GOLD_HI)
+	draw_rect(Rect2(r.position - Vector2(3, 3), Vector2(2, r.size.y + 6)), Ornate.GOLD_HI)
+	draw_rect(Rect2(r.position + Vector2(-3, r.size.y + 1), Vector2(r.size.x + 6, 2)), Ornate.GOLD_MID)
+	draw_rect(Rect2(r.position + Vector2(r.size.x + 1, -3), Vector2(2, r.size.y + 6)), Ornate.GOLD_MID)
+	draw_rect(r.grow(0.5), Color(0.025, 0.02, 0.02))
+	draw_rect(r, Color(0.07, 0.06, 0.055))
+
+
 func _slot(r: Rect2, i: int, p: Player) -> void:
 	var a: Dictionary = p.abilities[i]
 	var ready := p.can_cast(i)
@@ -203,8 +227,7 @@ func _slot(r: Rect2, i: int, p: Player) -> void:
 	if p.cls == "pyrewitch" and a.id == "step":
 		cd = 0.0 if p.step_charges > 0 else a.cd - p.step_recharge
 	var lacking := not ready and cd <= 0.0 and i != 4
-	draw_rect(r.grow(3), Color(0.02, 0.018, 0.018))
-	draw_rect(r, Color(0.1, 0.085, 0.08))
+	_frame(r)
 	var col := Color(1.0, 0.82, 0.6) if ready else Color(0.55, 0.5, 0.46)
 	if i == 4:
 		col = Color(1.0, 0.6, 0.25) if ready else Color(0.45, 0.42, 0.4)
@@ -219,8 +242,6 @@ func _slot(r: Rect2, i: int, p: Player) -> void:
 		draw_rect(r, bc, false, 2.0)
 		if p.ult_t > 0.0:
 			draw_rect(r.grow(4), Color(1.2, 0.6, 0.2, 0.5 + 0.3 * sin(t * 8.0)), false, 2.0)
-	else:
-		draw_rect(r, Color(0.35, 0.28, 0.22), false, 1.5)
 	if cd > 0.0 and cd_max > 0.0:
 		var k := clampf(cd / cd_max, 0.0, 1.0)
 		_sweep(r, k)
@@ -259,9 +280,7 @@ func _sweep(r: Rect2, k: float) -> void:
 
 func _small_slot(c: Vector2, id: String, charges: int, max_charges: int, key: String, col: Color, cd := 0.0, secs := 0) -> void:
 	var r := Rect2(c - Vector2(22, 22), Vector2(44, 44))
-	draw_rect(r.grow(2), Color(0.02, 0.018, 0.018))
-	draw_rect(r, Color(0.1, 0.085, 0.08))
-	draw_rect(r, Color(0.35, 0.28, 0.22), false, 1.0)
+	_frame(r)
 	var on := charges != 0 and cd <= 0.0
 	Icons.draw(self, id, c, 40.0, col if on else Color(0.4, 0.37, 0.35))
 	if cd > 0.0:
@@ -296,7 +315,7 @@ func _draw_left(p: Player) -> void:
 	if Game.hardcore:
 		_text(Vector2(x, y), "HARDCORE", 14, Color(0.9, 0.35, 0.25), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 		y += 20
-	_text(Vector2(x, y), Game.diff().name, 14, Color(1.0, 0.75, 0.45), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+	_text(Vector2(x, y), Game.diff().name, 14, Game.C_GOLD, Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 24
 	_text(Vector2(x, y), "%d gold" % Game.gold, 17, Color(1.0, 0.85, 0.3), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 24

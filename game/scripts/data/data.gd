@@ -59,6 +59,27 @@ const CLASSES := {
 			{"id": "phoenix", "name": "Phoenix Form", "action": "ultimate", "cd": 1.0, "cost": 0.0, "desc": "Become living flame for 9 seconds. Heat cannot hurt you."},
 		],
 	},
+	"crownbearer": {
+		"name": "Crownbearer",
+		"role": "Unbound · Overpowered",
+		"locked": true,
+		"unlock_hint": "Reserved for those who have ended the Ember King's reign. Finish the whole story once, on any character, and the crown will answer to you.",
+		"blurb": "The ash crown chose you. What once burned a kingdom now bends to your hand, and nothing in these lands can stand against it.",
+		"resource": "Crown Fire",
+		"resource_hint": "Never runs dry. Every ability is free.",
+		"res_color": Color(1.0, 0.8, 0.25),
+		"max_hp": 700.0,
+		"speed": 260.0,
+		"armor": 0.35,
+		"ratings": {"Toughness": 5, "Damage": 5, "Range": 3, "Complexity": 1},
+		"abilities": [
+			{"id": "cleave", "name": "Sovereign Cleave", "action": "attack_1", "cd": 0.3, "cost": 0.0, "desc": "A crushing arc of crown fire."},
+			{"id": "rush", "name": "Royal Charge", "action": "attack_2", "cd": 2.0, "cost": 0.0, "desc": "Charge forward and stun everything in your path."},
+			{"id": "oath", "name": "Unbroken", "action": "skill_1", "cd": 6.0, "cost": 0.0, "desc": "Take far less damage, then release it as fire."},
+			{"id": "molten", "name": "Crown Aura", "action": "skill_2", "cd": 8.0, "cost": 0.0, "desc": "Burn everything near you for 8 seconds."},
+			{"id": "titan", "name": "Ossuary Titan", "action": "ultimate", "cd": 1.0, "cost": 0.0, "desc": "Raise a giant for 16 seconds."},
+		],
+	},
 }
 
 const HEAT_COST := {"bolt": 6.0, "storm": 26.0, "step": 16.0, "smother": -40.0}
@@ -309,7 +330,7 @@ const ZONES := [
 		"id": "fields", "name": "The Cinder Fields", "line": "Nothing grows. Nothing has grown in years.", "act": 4,
 		"style": "open", "size": Vector2i(160, 160), "ambient": "amb_hell", "prop_density": 1.2,
 		"ground_a": Color(0.33, 0.27, 0.25), "ground_b": Color(0.15, 0.11, 0.1), "vein": Color(3.0, 0.9, 0.2), "vein_amt": 0.55,
-		"wall": Color(0.03, 0.02, 0.02), "pattern": 2.0, "modulate": Color(0.5, 0.44, 0.43),
+		"wall": Color(0.03, 0.02, 0.02), "pattern": 0.0, "modulate": Color(0.5, 0.44, 0.43),
 		"pool": {"cinder_hound": 4, "scarecrow": 3, "ash_acolyte": 3, "ash_revenant": 1}, "packs": 54, "hp_mult": 4.6, "dmg_mult": 2.5,
 		"emerge": {"kind": "ash_revenant", "from": ["rock", "bones", "spike"], "sites": 7},
 		"props": ["dead_tree", "spike", "rock", "impaled", "bones", "chain"],
@@ -374,7 +395,7 @@ const VILLAGE := {
 	"id": "village", "name": "Cinderfall", "line": "A few fires. A few of the living.",
 	"style": "village", "size": Vector2i(78, 64), "ambient": "amb_forest",
 	"ground_a": Color(0.36, 0.31, 0.25), "ground_b": Color(0.17, 0.14, 0.12), "vein": Color(1.8, 0.8, 0.3), "vein_amt": 0.06,
-	"wall": Color(0.02, 0.02, 0.02), "pattern": 3.0, "modulate": Color(0.9, 0.84, 0.78),
+	"wall": Color(0.02, 0.02, 0.02), "pattern": 0.0, "modulate": Color(0.9, 0.84, 0.78),
 	"pool": {}, "packs": 0, "hp_mult": 1.0, "dmg_mult": 1.0, "props": [], "champion": {},
 }
 

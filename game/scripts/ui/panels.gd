@@ -20,7 +20,7 @@ var _scroll: ScrollContainer
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = Game.theme
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -47,11 +47,11 @@ func close() -> void:
 func _root(dim := 0.7) -> Control:
 	clear()
 	var c := Control.new()
-	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(c)
 	var bg := ColorRect.new()
 	bg.color = Color(0.02, 0.015, 0.015, dim)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(bg)
 	current = c
 	return c
@@ -103,10 +103,10 @@ func _sb(bg: Color, border: Color, pad := 16.0) -> StyleBoxFlat:
 func _frame(title: String, sub := "") -> VBoxContainer:
 	var c := _root()
 	var cc := CenterContainer.new()
-	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(cc)
 	var pc := PanelContainer.new()
-	pc.add_theme_stylebox_override("panel", _sb(Color(0.055, 0.047, 0.045, 0.97), Color(0.3, 0.24, 0.19), 26))
+	pc.add_theme_stylebox_override("panel", Ornate.box("panel"))
 	cc.add_child(pc)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
@@ -218,9 +218,9 @@ func _show_tip(item: Variant, compare: Variant = null, price_text := "") -> void
 	if it.implicit.has("k"):
 		_tip_box.add_child(_label(Items.stat_text(it.implicit.k, float(it.implicit.v)), Game.font_body_bold, 20, Color(0.92, 0.88, 0.8)))
 	for m in it.mods:
-		_tip_box.add_child(_wrap(_label(Items.stat_text(m.k, float(m.v)), Game.font_body, 19, Color(0.55, 0.72, 1.0) if int(it.rarity) < 3 else Color(1.0, 0.7, 0.4)), 380.0))
+		_tip_box.add_child(_wrap(_label(Items.stat_text(m.k, float(m.v)), Game.font_body, 19, Color(0.55, 0.72, 1.0) if int(it.rarity) < 3 else Game.C_GOLD), 380.0))
 	if String(it.tag) != "":
-		_tip_box.add_child(_wrap(_label("“%s”" % it.tag, Game.font_italic, 17, Color(0.85, 0.55, 0.3)), 380.0))
+		_tip_box.add_child(_wrap(_label("“%s”" % it.tag, Game.font_italic, 17, Game.C_GOLD), 380.0))
 	var dur_col := Color(0.65, 0.62, 0.58)
 	var dur_txt := "Durability %d / %d" % [int(it.dur), int(it.dur_max)]
 	if Items.is_broken(it):
@@ -562,7 +562,7 @@ func show_quests(elder: bool) -> void:
 		var d: Dictionary = Game.diff()
 		dr.add_child(_label("Difficulty", Game.font_body, 20, Color(0.65, 0.61, 0.57)))
 		dr.add_child(_button("◀", func(): _set_diff(Game.difficulty - 1), 46.0, 36.0))
-		dr.add_child(_label("%d / %d   %s" % [Game.difficulty + 1, Game.DIFFICULTIES.size(), d.name], Game.font_display_bold, 21, Color(1.0, 0.75, 0.45)))
+		dr.add_child(_label("%d / %d   %s" % [Game.difficulty + 1, Game.DIFFICULTIES.size(), d.name], Game.font_display_bold, 21, Game.C_GOLD))
 		dr.add_child(_button("▶", func(): _set_diff(Game.difficulty + 1), 46.0, 36.0))
 		dr.add_child(_label("Enemies %d%% life · %d%% damage   XP +%d%%   Gold +%d%%   Magic find +%d%%" % [int(float(d.hp) * 100.0), int(float(d.dmg) * 100.0), int(float(d.xp) * 100.0 - 100.0), int(float(d.gold) * 100.0 - 100.0), int(d.mf)], Game.font_body, 16, Color(0.6, 0.56, 0.52)))
 	_scroll = ScrollContainer.new()
@@ -747,7 +747,7 @@ func show_skills() -> void:
 				b.add_theme_stylebox_override(st, _sb(Color(0.08, 0.065, 0.058) if open else Color(0.05, 0.045, 0.045), Game.C_EMBER_HOT if st in ["hover", "focus"] and can else edge, 10))
 			b.disabled = not can
 			var bv := VBoxContainer.new()
-			bv.set_anchors_preset(Control.PRESET_FULL_RECT)
+			bv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			bv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bv.add_theme_constant_override("separation", 1)
 			b.add_child(bv)

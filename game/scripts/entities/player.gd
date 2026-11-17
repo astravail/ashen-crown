@@ -101,6 +101,8 @@ func dmg_mult() -> float:
 		m += 0.3
 	if buffs.has("fury"):
 		m += 0.5
+	if cls == "crownbearer":
+		m += 1.5
 	if cls == "pyrewitch":
 		m += resource * 0.004
 		if has_mod("heat_master") and resource > 70.0:
@@ -110,6 +112,8 @@ func dmg_mult() -> float:
 
 func cd_rate() -> float:
 	var r := 1.0 + 0.1 * mod("alacrity") + minf(0.6, Game.gear_stat("cdr") / 100.0)
+	if cls == "crownbearer":
+		r += 0.6
 	if frag("haste"):
 		r += 0.25
 	if buffs.has("haste"):
@@ -863,6 +867,11 @@ func _draw() -> void:
 	match cls:
 		"knight":
 			_draw_knight(bob, step, side, a)
+		"crownbearer":
+			_draw_knight(bob, step, side, a)
+			var cy := -62.0 + bob
+			var gold := Color(1.0, 0.8, 0.25, a)
+			draw_colored_polygon(PackedVector2Array([Vector2(-10, cy), Vector2(-12, cy - 12), Vector2(-5, cy - 6), Vector2(0, cy - 15), Vector2(5, cy - 6), Vector2(12, cy - 12), Vector2(10, cy)]), gold)
 		"gravecaller":
 			_draw_gravecaller(bob, step, side, a)
 		"pyrewitch":
@@ -957,7 +966,7 @@ func _draw_glow() -> void:
 	var bob := sin(anim * 11.0) * 1.6 if moving else sin(anim * 2.0) * 0.6
 	var side := 1.0 if aim_dir.x >= 0.0 else -1.0
 	match cls:
-		"knight":
+		"knight", "crownbearer":
 			var y := -18.0 + bob
 			glow.draw_line(Vector2(-6, y - 40), Vector2(6, y - 40), Color(3.0, 1.2, 0.3), 2.5)
 			if molten_t > 0.0:

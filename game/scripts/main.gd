@@ -12,6 +12,7 @@ var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
 var cut_layer: CanvasLayer
 var env: Environment
+var tutorial: Tutorial
 var _overlay := ""
 var _carry := {}
 var _busy := false
@@ -43,13 +44,21 @@ func _ready() -> void:
 	add_child(top)
 	fade = ColorRect.new()
 	fade.color = Color(0.02, 0.016, 0.016, 1.0)
-	fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(fade)
 	zone_card = ZoneCard.new()
-	zone_card.set_anchors_preset(Control.PRESET_FULL_RECT)
+	zone_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	zone_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(zone_card)
+	var tut_layer := CanvasLayer.new()
+	tut_layer.layer = 20
+	tut_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(tut_layer)
+	tutorial = Tutorial.new()
+	tutorial.main = self
+	tut_layer.add_child(tutorial)
+	menus.tutorial = tutorial
 	# Always visible, on every screen: the beta tag and the optional FPS counter.
 	var overlay := CanvasLayer.new()
 	overlay.layer = 30
@@ -57,9 +66,14 @@ func _ready() -> void:
 	add_child(overlay)
 	overlay.add_child(FpsCounter.new())
 	var beta := BetaTag.new()
-	beta.set_anchors_preset(Control.PRESET_FULL_RECT)
+	beta.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	beta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(beta)
+
+	var relay := InputRelay.new()
+	relay.main = self
+	relay.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(relay)
 
 	menus.start_run.connect(_on_start_run)
 	menus.load_character.connect(_on_load_character)
@@ -85,6 +99,11 @@ func _ready() -> void:
 		if a.begins_with("--voicetest"):
 			var vt: Node = load("res://scripts/debug/voice_test.gd").new()
 			add_child(vt)
+			return
+		if a.begins_with("--uishots"):
+			var us: Node = load("res://scripts/debug/uishots.gd").new()
+			us.main = self
+			add_child(us)
 			return
 		if a.begins_with("--cutshots"):
 			var cn: Node = load("res://scripts/debug/cutshots.gd").new()
@@ -124,8 +143,9 @@ func _build_environment() -> void:
 	env.set_glow_level(3, 0.6)
 	env.set_glow_level(4, 0.4)
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 0.92
+	env.adjustment_brightness = 1.35
+	env.adjustment_contrast = 1.12
+	env.adjustment_saturation = 0.88
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -275,7 +295,16 @@ func _fade_to(a: float, dur: float) -> void:
 
 # ---------------------------------------------------------------- input and overlays
 
-func _unhandled_input(event: InputEvent) -> void:
+## Forwards input from a node that keeps running while the tree is paused,
+## so Esc and the panel keys still close panels and the pause menu.
+class InputRelay extends Node:
+	var main: Node
+
+	func _unhandled_input(event: InputEvent) -> void:
+		main.handle_input(event)
+
+
+func handle_input(event: InputEvent) -> void:
 	if world == null or world.attract or _busy or world.player == null:
 		return
 	if event.is_action_pressed("pause"):
@@ -357,6 +386,7 @@ func _on_quest_ready(title: String) -> void:
 # ---------------------------------------------------------------- the village folk
 
 func _on_npc_talk(kind: String) -> void:
+	tutorial.on_npc(kind)
 	match kind:
 		"elder":
 			Voice.bark("elder", "greet", "", 20.0)
@@ -487,6 +517,7 @@ func _on_fragment_chosen(id: String) -> void:
 
 
 func _on_player_died() -> void:
+	tutorial.on_death()
 	_overlay = "death"
 	Game.stat_add("deaths", 1.0)
 	Game.save_lifetime()

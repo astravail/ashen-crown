@@ -3,17 +3,18 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.3.1"
+const VERSION := "0.4.0"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
-const C_EMBER := Color(0.91, 0.45, 0.16)
-const C_EMBER_HOT := Color(1.0, 0.7, 0.36)
+const C_EMBER := Color(0.82, 0.17, 0.13)
+const C_EMBER_HOT := Color(0.96, 0.82, 0.48)
 const C_ASH := Color(0.62, 0.58, 0.55)
-const C_BONE := Color(0.86, 0.82, 0.74)
+const C_BONE := Color(0.88, 0.82, 0.68)
+const C_GOLD := Color(0.84, 0.68, 0.36)
 const C_INK := Color(0.04, 0.035, 0.035)
 const C_PANEL := Color(0.07, 0.06, 0.058, 0.94)
-const C_TEXT := Color(0.88, 0.84, 0.78)
+const C_TEXT := Color(0.86, 0.8, 0.68)
 const C_DIM := Color(0.55, 0.52, 0.49)
 const C_BANE := Color(0.72, 0.32, 0.3)
 
@@ -40,8 +41,16 @@ var settings := {
 	"voice": true,
 	"subtitles": true,
 	"fps_show": false,
+	"tutorials": true,
+	"tut_seen": [],
 	"fps_corner": 1,    # 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
 }
+
+func class_unlocked(id: String) -> bool:
+	if not bool(Data.CLASSES[id].get("locked", false)):
+		return true
+	return int(records.get("wins", 0)) > 0
+
 
 var records := {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0}
 
@@ -553,21 +562,21 @@ func _build_theme() -> void:
 	theme.default_font_size = 22
 	theme.set_color("font_color", "Label", C_TEXT)
 
-	theme.set_font("font", "Button", font_display)
+	theme.set_font("font", "Button", font_display_bold)
 	theme.set_font_size("font_size", "Button", 24)
-	theme.set_color("font_color", "Button", C_TEXT)
+	theme.set_color("font_color", "Button", C_GOLD)
 	theme.set_color("font_hover_color", "Button", C_EMBER_HOT)
 	theme.set_color("font_focus_color", "Button", C_EMBER_HOT)
 	theme.set_color("font_pressed_color", "Button", Color.WHITE)
 	theme.set_color("font_disabled_color", "Button", Color(0.4, 0.38, 0.36))
-	theme.set_stylebox("normal", "Button", _box(Color(0.08, 0.07, 0.065, 0.85), Color(0.3, 0.26, 0.23, 0.9)))
-	theme.set_stylebox("hover", "Button", _box(Color(0.14, 0.09, 0.06, 0.95), C_EMBER))
-	theme.set_stylebox("focus", "Button", _box(Color(0.14, 0.09, 0.06, 0.95), C_EMBER))
-	theme.set_stylebox("pressed", "Button", _box(Color(0.24, 0.12, 0.05, 1.0), C_EMBER_HOT))
-	theme.set_stylebox("disabled", "Button", _box(Color(0.06, 0.055, 0.05, 0.7), Color(0.2, 0.18, 0.17)))
+	theme.set_stylebox("normal", "Button", Ornate.box("btn"))
+	theme.set_stylebox("hover", "Button", Ornate.box("btn_hot"))
+	theme.set_stylebox("focus", "Button", Ornate.box("btn_hot"))
+	theme.set_stylebox("pressed", "Button", Ornate.box("btn_press"))
+	theme.set_stylebox("disabled", "Button", Ornate.box("btn_off"))
 
-	theme.set_stylebox("panel", "PanelContainer", _box(C_PANEL, Color(0.27, 0.23, 0.2), 1, 2, 22))
-	theme.set_stylebox("panel", "Panel", _box(C_PANEL, Color(0.27, 0.23, 0.2), 1, 2, 22))
+	theme.set_stylebox("panel", "PanelContainer", Ornate.box("panel"))
+	theme.set_stylebox("panel", "Panel", Ornate.box("panel"))
 
 	var grab := StyleBoxFlat.new()
 	grab.bg_color = C_EMBER
