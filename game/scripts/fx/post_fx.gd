@@ -69,7 +69,7 @@ func update(delta: float, cam: Camera2D) -> void:
 	kick = move_toward(kick, 0.0, delta * 3.5)
 	var vs: Vector2 = world.get_viewport_rect().size / cam.zoom
 	# Oversized, so camera shake and smoothing never show its edge; the shader works in screen space.
-	rect.size = vs * 1.8
+	rect.size = vs * 1.12
 	rect.position = cam.get_screen_center_position() - rect.size * 0.5
 	mat.set_shader_parameter("cam_pos", cam.get_screen_center_position())
 	mat.set_shader_parameter("view_size", vs)
@@ -77,6 +77,7 @@ func update(delta: float, cam: Camera2D) -> void:
 	mat.set_shader_parameter("hurt", hurt)
 	var q: float = Game.quality_factor()
 	# On the lowest setting the lens fringe is dropped: it costs two more reads of the screen per pixel.
+	mat.set_shader_parameter("lite", q <= 0.3)
 	mat.set_shader_parameter("brightness", clampf(float(Game.settings.get("brightness", 1.0)), 0.5, 2.0))
 	mat.set_shader_parameter("grain", 0.05 if q > 0.3 else 0.035)
 	mat.set_shader_parameter("fringe", 0.0011 if q > 0.3 else 0.0)

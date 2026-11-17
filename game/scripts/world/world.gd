@@ -1125,6 +1125,35 @@ func _update_boss_gate() -> void:
 
 # ================================================================ combat
 
+## The chance-on-hit perks of worn gear. Each enemy rests a moment between them, so they never chain.
+func _gear_procs(e: Enemy, dmg: float) -> void:
+	if e.dead:
+		return
+	if randf() < Game.proc("echo"):
+		texts.add_label(e.global_position + Vector2(0, -50), "Echo", Color(0.8, 0.8, 1.0))
+		damage(e, dmg * 0.5, player, {"proc": true, "can_crit": false})
+		if e.dead:
+			return
+	if e.proc_icd > 0.0:
+		return
+	if randf() < Game.proc("fear") and not e.is_boss:
+		e.fear_t = 2.2 if not e.is_champion else 1.2
+		e.proc_icd = 1.5
+		texts.add_label(e.global_position + Vector2(0, -50), "Terrified", Color(0.75, 0.55, 1.0))
+	elif randf() < Game.proc("stunc") and not e.is_boss:
+		e.apply_stun(0.7 if not e.is_champion else 0.4)
+		e.proc_icd = 1.5
+		texts.add_label(e.global_position + Vector2(0, -50), "Stunned", Color(1.0, 0.9, 0.4))
+	elif randf() < Game.proc("chill"):
+		e.apply_slow(0.45, 2.5)
+		e.proc_icd = 1.0
+		texts.add_label(e.global_position + Vector2(0, -50), "Chilled", Color(0.6, 0.9, 1.0))
+	elif randf() < Game.proc("ignite"):
+		e.apply_burn(maxf(4.0, dmg * 0.35), 3.0, player)
+		e.proc_icd = 1.0
+		texts.add_label(e.global_position + Vector2(0, -50), "Ignited", Color(1.0, 0.6, 0.2))
+
+
 func damage(target: Actor, amount: float, src: Actor, opts := {}) -> float:
 	if target == null or target.dead or amount <= 0.0:
 		return 0.0
@@ -1170,6 +1199,8 @@ func damage(target: Actor, amount: float, src: Actor, opts := {}) -> float:
 			Game.stat_add("crits", 1.0)
 		if target.marked and player and player.has_mod("mark_drain"):
 			player.heal(dmg * 0.03, false)
+		if target is Enemy and not opts.get("dot", false) and not opts.get("proc", false):
+			_gear_procs(target as Enemy, dmg)
 	if Game.settings.numbers and (not opts.get("dot", false) or randf() < 0.35):
 		var c := Color(1.0, 0.9, 0.75)
 		if target.team == Actor.Team.PLAYER:
@@ -1413,6 +1444,18 @@ func _update_hover_loot() -> void:
 	if attract or player == null or player.dead or get_tree().paused:
 		return
 	if get_viewport().gui_get_hovered_control() != null:
+		return
+	if Game.using_gamepad:
+		# with a controller the nearest piece of gear within reach is the one selected, and Interact takes it
+		var bestp := INF
+		for l in loots:
+			if l.gold == 0 and not l.done and l.t > 0.4:
+				var dp := l.global_position.distance_squared_to(player.global_position)
+				if dp < bestp and dp < 110.0 * 110.0:
+					bestp = dp
+					hovered_loot = l
+		if hovered_loot and Input.is_action_just_pressed("interact"):
+			hovered_loot.pick_up()
 		return
 	var m := get_global_mouse_position()
 	var best := INF

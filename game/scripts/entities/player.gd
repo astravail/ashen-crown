@@ -853,6 +853,8 @@ func on_damaged(amount: float, _src: Actor, _opts: Dictionary) -> void:
 	if amount >= 1.0 and hurt_t <= 0.0:
 		hurt_t = 0.25
 		Sfx.play("hurt", -6.0)
+		if Game.using_gamepad and bool(Game.settings.get("vibration", true)):
+			Input.start_joy_vibration(0, 0.5, 0.25, 0.18)
 		# now and then the hero cries out, in their own voice
 		if _voice_cd <= 0.0 and randf() < 0.3:
 			_voice_cd = 2.0

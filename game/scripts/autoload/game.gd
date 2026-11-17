@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.6"
+const VERSION := "0.5.7"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -33,6 +33,7 @@ var settings := {
 	"numbers": true,
 	"gore": true,
 	"fullscreen": false,
+	"vibration": true,
 	"aim_assist": true,   # controller: aim at the nearest enemy when the right stick is idle
 	"stick_deadzone": 0.25,
 	"minimap": true,
@@ -117,6 +118,11 @@ var update_url := ""
 
 ## What changed in each version, newest first. Shown in What's new, and once after every update.
 const RELEASE_NOTES := [
+	{"v": "0.5.7", "items": [
+		"Enemies move like individuals: they circle, hesitate, and sometimes fall back after an attack or when struck, instead of running straight at you.",
+		"Gear can now carry chance-on-hit perks: terrify, stun, chill, ignite and a second strike. They are capped so they stay balanced.",
+		"Controller support (preview): vibration, aim assist, and Interact picks up gear.",
+		"Small shader savings."]},
 	{"v": "0.5.6", "items": [
 		"Tips appear at the moment they matter, freeze the game while you read, and can be closed after three seconds with your Interact key.",
 		"The game resumes when a tip is closed."]},
@@ -268,6 +274,14 @@ func unlock(id: String) -> bool:
 func add_gold(n: int) -> void:
 	gold += n
 	stat_add("gold_earned", n)
+
+
+## Chance-on-hit perks are capped, so stacking them never makes an enemy helpless.
+const PROC_CAP := {"fear": 0.2, "stunc": 0.15, "chill": 0.3, "ignite": 0.3, "echo": 0.12}
+
+
+func proc(k: String) -> float:
+	return minf(float(PROC_CAP.get(k, 0.0)), gear_stat(k) / 100.0)
 
 
 func gear_stat(k: String) -> float:

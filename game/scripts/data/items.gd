@@ -24,6 +24,11 @@ const STATS := {
 	"mf": {"name": "Magic find", "unit": "%", "lo": 6.0, "hi": 12.0, "grow": 0.05, "dec": 0},
 	"ash": {"name": "Ash gained", "unit": "%", "lo": 6.0, "hi": 10.0, "grow": 0.03, "dec": 0},
 	"blast": {"name": "Slain enemies explode for % of their life", "unit": "%", "lo": 12.0, "hi": 20.0, "grow": 0.02, "dec": 0},
+	"fear": {"name": "chance to terrify enemies on hit", "unit": "%", "lo": 3.0, "hi": 5.0, "grow": 0.03, "dec": 0},
+	"stunc": {"name": "chance to stun on hit", "unit": "%", "lo": 2.0, "hi": 3.5, "grow": 0.02, "dec": 1},
+	"chill": {"name": "chance to chill on hit", "unit": "%", "lo": 5.0, "hi": 8.0, "grow": 0.03, "dec": 0},
+	"ignite": {"name": "chance to ignite on hit", "unit": "%", "lo": 5.0, "hi": 8.0, "grow": 0.03, "dec": 0},
+	"echo": {"name": "chance to strike a second time", "unit": "%", "lo": 2.0, "hi": 3.5, "grow": 0.02, "dec": 1},
 	"flask": {"name": "Potion cooldown", "unit": "", "lo": 1.0, "hi": 1.0, "grow": 0.0, "dec": 0},
 }
 
@@ -35,12 +40,12 @@ const IMPLICIT := {
 }
 
 const POOL := {
-	"weapon": ["dmg", "crit", "critd", "cdr", "leech", "ash", "mf", "hp"],
-	"helm": ["hp", "armor", "cdr", "crit", "mf", "regen", "ash"],
+	"weapon": ["dmg", "crit", "critd", "cdr", "leech", "ash", "mf", "hp", "fear", "stunc", "chill", "ignite", "echo"],
+	"helm": ["hp", "armor", "cdr", "crit", "mf", "regen", "ash", "fear"],
 	"chest": ["hp", "armor", "regen", "leech", "cdr", "dmg"],
 	"boots": ["speed", "hp", "armor", "gold", "regen", "cdr"],
-	"ring": ["dmg", "crit", "critd", "leech", "ash", "gold", "mf", "hp", "cdr"],
-	"amulet": ["dmg", "critd", "cdr", "hp", "ash", "mf", "regen", "leech", "crit"],
+	"ring": ["dmg", "crit", "critd", "leech", "ash", "gold", "mf", "hp", "cdr", "ignite", "chill", "echo", "stunc"],
+	"amulet": ["dmg", "critd", "cdr", "hp", "ash", "mf", "regen", "leech", "crit", "fear", "chill", "ignite"],
 }
 
 const BASES := {
@@ -57,11 +62,14 @@ const PREFIX := {
 	"speed": ["Fleet", "Hurried"], "crit": ["Keen", "Piercing"], "critd": ["Merciless", "Wicked"],
 	"cdr": ["Swift", "Tireless"], "leech": ["Hungering", "Gorging"], "regen": ["Mending", "Knitting"],
 	"gold": ["Gilded", "Covetous"], "mf": ["Lucky", "Fortune's"], "ash": ["Smouldering", "Cindered"],
+	"fear": ["Dreadful", "Haunting"], "stunc": ["Crushing", "Staggering"], "chill": ["Frostbitten", "Chilling"],
+	"ignite": ["Kindling", "Flaring"], "echo": ["Echoing", "Doubling"],
 }
 const SUFFIX := {
 	"dmg": "of Ruin", "hp": "of the Bull", "armor": "of Warding", "speed": "of Haste", "crit": "of Precision",
 	"critd": "of Cruelty", "cdr": "of Alacrity", "leech": "of Hunger", "regen": "of Mending",
 	"gold": "of Greed", "mf": "of Fortune", "ash": "of Embers",
+	"fear": "of Terror", "stunc": "of the Hammer", "chill": "of the Grave Cold", "ignite": "of Kindling", "echo": "of Echoes",
 }
 const RARE_A := ["Gloom", "Dread", "Cinder", "Ash", "Bone", "Grave", "Hollow", "Ember", "Pyre", "Wraith", "Blight", "Rot"]
 const RARE_B := {
@@ -282,7 +290,7 @@ static func item_stats(item: Dictionary) -> Dictionary:
 
 ## How much a stat is worth when judging whether one piece of gear beats another.
 const RATING_W := {"dmg": 1.0, "hp": 0.15, "armor": 3.0, "speed": 1.2, "crit": 3.0, "critd": 0.5, "cdr": 2.0,
-	"leech": 6.0, "regen": 8.0, "gold": 0.3, "mf": 0.3, "ash": 0.4, "blast": 0.5, "flask": 4.0}
+	"leech": 6.0, "regen": 8.0, "fear": 2.0, "stunc": 3.0, "chill": 1.5, "ignite": 1.5, "echo": 4.0, "gold": 0.3, "mf": 0.3, "ash": 0.4, "blast": 0.5, "flask": 4.0}
 
 
 static func rating(item: Variant) -> float:

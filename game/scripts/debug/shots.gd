@@ -13,6 +13,7 @@ var main: Node
 var quality := 2
 var hero := "knight"
 var bench := false
+var off: PackedStringArray = []
 
 
 func _ready() -> void:
@@ -23,6 +24,8 @@ func _ready() -> void:
 			views = a.substr(8).split(",")
 		elif a.begins_with("--quality="):
 			quality = int(a.substr(10))
+		elif a.begins_with("--off="):
+			off = a.substr(6).split(",")
 		elif a == "--bench":
 			bench = true
 		elif a.begins_with("--class="):
@@ -68,6 +71,7 @@ func _snap(name: String) -> void:
 	conv.get_texture().get_image().save_png("%s/%s.png" % [out_dir, name])
 	print("[shots] ", name)
 	if bench:
+		_apply_off()
 		var t0 := Time.get_ticks_usec()
 		var n := 0
 		while Time.get_ticks_usec() - t0 < 2500000:
@@ -75,6 +79,33 @@ func _snap(name: String) -> void:
 			n += 1
 		var ms := (Time.get_ticks_usec() - t0) / 1000.0 / n
 		print("[bench] %s q=%d  %.2f ms  %.0f fps" % [name, quality, ms, 1000.0 / ms])
+
+
+## For finding what costs frame time: switch parts of the scene off, then bench.
+func _apply_off() -> void:
+	var w: World = main.world
+	if w == null or off.is_empty():
+		return
+	if "post" in off and w.post:
+		w.post.visible = false
+	if "ground" in off:
+		w.ground.visible = false
+	if "veins" in off:
+		w.veins.visible = false
+	if "lights" in off:
+		for l in w.find_children("*", "PointLight2D", true, false):
+			l.visible = false
+	if "props" in off:
+		for p in w.props:
+			p.visible = false
+	if "ents" in off:
+		w.entity_layer.visible = false
+	if "fx" in off:
+		w.glow_fx.visible = false
+		w.smoke_fx.visible = false
+		w.decals.visible = false
+	if "hud" in off and main.hud:
+		main.hud.visible = false
 
 
 func _run() -> void:

@@ -1070,7 +1070,7 @@ func _settings_extra(grid: GridContainer) -> void:
 	opt.call("Frame limit", ["Unlimited", "30", "60", "120", "144"], maxi(0, [0, 30, 60, 120, 144].find(int(Game.settings.fps_cap))), func(i: int):
 		Game.settings.fps_cap = [0, 30, 60, 120, 144][i]
 		Game.apply_settings())
-	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"], ["Tutorial tips", "tutorials"], ["Show minimap", "minimap"], ["Controller aim assist", "aim_assist"], ["Check for updates", "update_check"]]:
+	for pair in [["Glow", "glow"], ["VSync", "vsync"], ["Show FPS", "fps_show"], ["Voice lines", "voice"], ["Subtitles", "subtitles"], ["Tutorial tips", "tutorials"], ["Show minimap", "minimap"], ["Controller aim assist", "aim_assist"], ["Controller vibration", "vibration"], ["Check for updates", "update_check"]]:
 		grid.add_child(_label(pair[0], Game.font_body, 22, Game.C_TEXT))
 		var cb := CheckButton.new()
 		cb.button_pressed = bool(Game.settings[pair[1]])
@@ -1087,6 +1087,10 @@ func _settings_extra(grid: GridContainer) -> void:
 		Game.settings.tutorials = true
 		Sfx.play("ui_move", -8.0, 0.0), 220.0, 36.0)
 	grid.add_child(rb)
+	grid.add_child(_label("Controller", Game.font_body, 22, Game.C_TEXT))
+	var cstate := _wrap(_label("Preview. Plug in a gamepad and it takes over: sticks move and aim, buttons act, and Interact picks up gear.", Game.font_italic, 16, Color(0.6, 0.56, 0.52)))
+	cstate.custom_minimum_size = Vector2(340, 0)
+	grid.add_child(cstate)
 	grid.add_child(_label("Stick dead zone", Game.font_body, 22, Game.C_TEXT))
 	var dz := HSlider.new()
 	dz.min_value = 0.05

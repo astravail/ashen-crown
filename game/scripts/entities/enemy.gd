@@ -37,9 +37,20 @@ var tint := Color.WHITE
 var emerge_t := 0.0
 var wander_dir := Vector2.ZERO
 var _wander_t := 0.0
+## How enemies move like individuals rather than like magnets: a steering vector that turns gradually,
+## a side they circle toward, a boldness of their own, and a rest between retreats.
+var _steer := Vector2.ZERO
+var _orbit := 1.0
+var _bold := 1.0
+var _retreat_cd := 0.0
+var fear_t := 0.0
+var proc_icd := 0.0
 
 
 func setup(k: String, hp_mult: float, dmg_mult: float) -> void:
+	_orbit = 1.0 if randf() < 0.5 else -1.0
+	_bold = randf_range(0.7, 1.3)
+	_retreat_cd = randf_range(0.0, 3.0)
 	var d: Dictionary = Data.enemy_def(k)
 	variant = k
 	kind = d.get("arch", k)
@@ -122,6 +133,20 @@ func update(dt: float) -> void:
 		glow.queue_redraw()
 		return
 	cd -= dt
+	_retreat_cd -= dt
+	proc_icd = maxf(0.0, proc_icd - dt)
+	if fear_t > 0.0 and not is_stunned() and world.player:
+		# terrified: runs from the hero, blind to everything else
+		fear_t -= dt
+		var away := (global_position - world.player.global_position).normalized()
+		_steer = _steer.lerp(away, clampf(dt * 8.0, 0.0, 1.0))
+		if away.x != 0.0:
+			facing = Vector2(signf(away.x), 0)
+		integrate(dt, _steer * speed * 0.95 * move_speed_mult())
+		state = "chase"
+		queue_redraw()
+		glow.queue_redraw()
+		return
 	_retarget -= dt
 	if _retarget <= 0.0 or not is_instance_valid(target) or target.dead:
 		_retarget = 0.5
@@ -229,10 +254,40 @@ func _think(dt: float) -> void:
 				_begin_windup()
 				return
 			var mv := world.path_dir(global_position, tp)
-			var spd := speed * move_speed_mult()
+			# a walk that has a rhythm to it, not a constant slide toward the target
+			var spd := speed * move_speed_mult() * (0.86 + 0.22 * sin(anim * 1.7 + _seed * 3.0))
 			if dist < want * 0.85:
 				spd = 0.0
-			integrate(dt, mv * spd)
+			elif _melee_kind() and dist < want * 3.2 and cd > 0.0 and randf() < dt * 0.35 * _bold:
+				# close but not striking yet: size the target up from the side for a moment
+				state = "circle"
+				state_t = randf_range(0.9, 2.0)
+				return
+			_steer = _steer.lerp(mv, clampf(dt * 5.0, 0.0, 1.0))
+			integrate(dt, _steer * spd)
+		"retreat":
+			state_t -= dt
+			var back := (-to.normalized()).rotated(0.5 * _orbit)
+			_steer = _steer.lerp(back, clampf(dt * 6.0, 0.0, 1.0))
+			integrate(dt, _steer * speed * 0.8 * move_speed_mult())
+			if state_t <= 0.0:
+				# after backing off they often circle a while before coming back in
+				if randf() < 0.55:
+					state = "circle"
+					state_t = randf_range(1.0, 2.2)
+				else:
+					state = "chase"
+		"circle":
+			state_t -= dt
+			var want2 := (attack_range + target.radius) * 2.2
+			var side := to.orthogonal().normalized() * _orbit
+			var radial := to.normalized() * clampf((dist - want2) / 80.0, -1.0, 1.0)
+			var dirv := (side * 0.9 + radial * 0.6).normalized()
+			_steer = _steer.lerp(dirv, clampf(dt * 5.0, 0.0, 1.0))
+			integrate(dt, _steer * speed * 0.62 * move_speed_mult())
+			if state_t <= 0.0 or world.nearest_ally(global_position, 120.0) == null and dist > 380.0:
+				state = "chase"
+				_orbit = -_orbit if randf() < 0.4 else _orbit
 		"windup":
 			state_t -= dt
 			integrate(dt, Vector2.ZERO)
@@ -254,6 +309,11 @@ func _think(dt: float) -> void:
 			integrate(dt, Vector2.ZERO)
 			if state_t <= 0.0:
 				state = "chase"
+				# not every attack is followed by another: sometimes they fall back and look for an opening
+				if _melee_kind() and _retreat_cd <= 0.0 and randf() < 0.3:
+					state = "retreat"
+					state_t = randf_range(0.6, 1.3)
+					_retreat_cd = randf_range(5.0, 9.0)
 
 
 func _begin_windup() -> void:
@@ -328,8 +388,17 @@ func _champion_special() -> void:
 			world.spawn_hazard("telegraph", p, {"radius": 80.0, "delay": 1.0 + i * 0.15, "dmg": dmg * 0.9, "team": Team.ENEMY, "src": self, "sound": "explode_small", "shake": 4.0})
 
 
+func _melee_kind() -> bool:
+	return not is_boss and kind in ["husk", "brute", "hound"]
+
+
 func on_damaged(_amount: float, src: Actor, _opts: Dictionary) -> void:
 	show_bar_t = 4.0
+	# now and then a struck enemy gives ground instead of pressing on
+	if _melee_kind() and _retreat_cd <= 0.0 and state in ["chase", "recover", "circle"] and randf() < (0.14 if not is_champion else 0.06):
+		state = "retreat"
+		state_t = randf_range(0.5, 1.0)
+		_retreat_cd = randf_range(6.0, 10.0)
 	if src and src != target and randf() < 0.3:
 		target = src
 
@@ -364,7 +433,7 @@ func _draw() -> void:
 	_find_rim()
 	var s := scale_mult
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(facing.x * s, s))
-	var walk := sin(anim * (speed / 9.0)) if (state == "chase" and not sleeping and not is_stunned()) or (sleeping and wander_dir != Vector2.ZERO) else 0.0
+	var walk := sin(anim * (speed / 9.0)) if (state in ["chase", "retreat", "circle"] and not sleeping and not is_stunned()) or (sleeping and wander_dir != Vector2.ZERO) else 0.0
 	match kind:
 		"husk": _draw_husk(walk)
 		"hound": _draw_hound(walk)

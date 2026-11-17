@@ -22,7 +22,11 @@ void vertex() {
 void fragment() {
 	vec2 p = wpos;
 	float e0 = edge_val(p);
-	float e_s = edge_val(p + vec2(0.0, WALL_H));
+	// the south face only exists next to a wall, so open floor skips the second lookup (same result)
+	float e_s = e0;
+	if (e0 < 0.512) {
+		e_s = edge_val(p + vec2(0.0, WALL_H));
+	}
 	float fl = smoothstep(0.488, 0.512, e0);
 	float face = (1.0 - fl) * smoothstep(0.488, 0.512, e_s);
 	float fv = clamp((0.5 - e0) / max(e_s - e0, 0.03), 0.0, 1.0);
