@@ -9,7 +9,8 @@ uniform vec3 high_tint = vec3(1.08, 1.0, 0.9);
 uniform vec3 fog_color = vec3(0.05, 0.055, 0.06);
 uniform float fog_amount = 0.4;
 uniform float saturation = 1.0;
-uniform float exposure = 1.0;
+uniform float exposure = 0.8;
+uniform float brightness = 1.0;
 uniform float vignette = 0.5;
 uniform float grain = 0.05;
 uniform float fringe = 0.0011;
@@ -64,5 +65,8 @@ void fragment() {
 
 	float g = hash(FRAGCOORD.xy + fract(TIME) * 61.7) - 0.5;
 	col += (min(col, vec3(1.0)) * 1.6 + 0.012) * g * grain;
-	COLOR = vec4(max(col, vec3(0.0)), 1.0);
+	col = max(col, vec3(0.0));
+	// the player's own brightness setting: a gamma that lifts or deepens the darks
+	col = pow(col, vec3(1.0 / brightness));
+	COLOR = vec4(col, 1.0);
 }

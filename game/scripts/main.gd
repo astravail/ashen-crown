@@ -249,6 +249,7 @@ func _bind_world(w: World) -> void:
 	w.door_enter.connect(_enter_interior)
 	w.door_exit.connect(_exit_interior)
 	w.recall_done.connect(_on_recall_done)
+	w.portal_return.connect(_on_portal_return)
 	w.act_entered.connect(_on_act_entered)
 
 
@@ -418,12 +419,22 @@ func _on_teleport(pos: Vector2) -> void:
 
 func _on_recall_done() -> void:
 	var pos: Vector2 = overworld.map.regions[0].pois.waypoint + Vector2(0, 64)
+	# the portal left behind leads back to where the hero stood (or to the door, if it was an interior)
+	var origin: Vector2 = _door_pos + Vector2(0, 70) if world.interior else world.recall_origin
 	await _fade_to(1.0, 0.4)
 	if world.interior:
 		_exit_interior_now(pos)
 	else:
 		world.teleport_player(pos)
+	world.open_town_portal(origin)
 	_fade_to(0.0, 0.6)
+
+
+func _on_portal_return(pos: Vector2) -> void:
+	_autosave()
+	await _fade_to(1.0, 0.35)
+	world.teleport_player(pos)
+	_fade_to(0.0, 0.5)
 
 
 func _enter_interior(idx: int) -> void:

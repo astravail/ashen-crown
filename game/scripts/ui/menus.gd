@@ -482,6 +482,25 @@ func show_settings(back: Callable) -> void:
 			Game.apply_settings()
 			Sfx.play("ui_move", -8.0, 0.0))
 		grid.add_child(cb)
+	grid.add_child(_label("Brightness", Game.font_body, 22, Game.C_TEXT))
+	var bchart := BrightnessChart.new()
+	bchart.gamma = float(Game.settings.brightness)
+	var bs := HSlider.new()
+	bs.min_value = 0.6
+	bs.max_value = 1.8
+	bs.step = 0.05
+	bs.value = float(Game.settings.brightness)
+	bs.custom_minimum_size = Vector2(340, 28)
+	bs.scrollable = false
+	bs.value_changed.connect(func(val: float):
+		Game.settings.brightness = val
+		bchart.gamma = val
+		bchart.queue_redraw())
+	grid.add_child(bs)
+	var bnote := _wrap(_label("Raise it until the middle shape is barely visible, and the left one is not.", Game.font_italic, 16, Color(0.6, 0.56, 0.52)))
+	bnote.custom_minimum_size = Vector2(260, 0)
+	grid.add_child(bnote)
+	grid.add_child(bchart)
 	_settings_extra(grid)
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(0, 24)
@@ -707,6 +726,31 @@ func show_ending(choice: String) -> void:
 
 
 # ---------------------------------------------------------------- small drawn widgets
+
+## Three shapes on black for setting the brightness: one plainly visible, one barely visible and one that
+## should not be seen at all. They go through the same curve as the world does.
+class BrightnessChart extends Control:
+	var gamma := 1.0
+	const LEVELS := [0.03, 0.1, 0.32]
+	const NAMES := ["Not visible", "Barely visible", "Visible"]
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(560, 150)
+
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), Color.BLACK)
+		var w := size.x / 3.0
+		for i in 3:
+			# the world is lit in linear light and the gamma works there, so the chart does the same
+			var lin: float = Color(LEVELS[i], LEVELS[i], LEVELS[i]).srgb_to_linear().r
+			var l: float = pow(lin, 1.0 / gamma)
+			var col := Color(l, l, l).linear_to_srgb()
+			var c := Vector2(w * (i + 0.5), 62.0)
+			# a crown cut-out, the same shape in each
+			var pts := PackedVector2Array([c + Vector2(-34, 20), c + Vector2(-34, -16), c + Vector2(-17, 2), c + Vector2(0, -26), c + Vector2(17, 2), c + Vector2(34, -16), c + Vector2(34, 20)])
+			draw_colored_polygon(pts, col)
+			draw_string(Game.font_body, Vector2(w * i, 128.0), NAMES[i], HORIZONTAL_ALIGNMENT_CENTER, w, 16, Color(0.5, 0.47, 0.44))
+
 
 class Rule extends Control:
 	func _draw() -> void:

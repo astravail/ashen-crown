@@ -378,11 +378,6 @@ func _markers(r: Rect2, src: Rect2, scale: float) -> void:
 		Icons.crown(self, goal, 18.0, gc, Color(1.2, 0.8, 0.4))
 	else:
 		draw_circle(goal, 5.0, gc, true, -1.0, true)
-	for p in world.interactives:
-		if p.kind.begins_with("shrine") and not p.used:
-			var q: Vector2 = to_screen.call(p.global_position)
-			if r.has_point(q) and world.is_explored(Vector2i(p.global_position / World.CELL)):
-				draw_circle(q, 4.0, Color(0.6, 0.85, 1.0), true, -1.0, true)
 	for e in world.enemies:
 		if e.dead or e.sleeping and not e.is_champion:
 			continue

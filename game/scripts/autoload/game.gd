@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.2"
+const VERSION := "0.5.3"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -33,6 +33,7 @@ var settings := {
 	"numbers": true,
 	"gore": true,
 	"fullscreen": false,
+	"brightness": 1.0,  # gamma of the world, calibrated in Settings
 	"quality": 2,       # 0 Low, 1 Medium, 2 High, 3 Ultra
 	"glow": true,
 	"msaa": 2,          # 0 off, 1 2x, 2 4x, 3 8x

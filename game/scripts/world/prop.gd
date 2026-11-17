@@ -5,7 +5,7 @@ extends Node2D
 const Ink := preload("res://scripts/fx/ink.gd")
 ## Kinds whose picture moves: everything else is drawn once and left alone.
 const LIVE := ["reeds", "pine", "hanged", "banner", "chain"]
-const LIVE_GLOW := ["brazier", "candles", "bonfire", "altar", "portal", "crown", "door", "waypoint", "sigil", "shrine_fury", "shrine_warding", "shrine_haste"]
+const LIVE_GLOW := ["brazier", "candles", "bonfire", "altar", "portal", "crown", "door", "waypoint", "sigil", "town_portal", "shrine_fury", "shrine_warding", "shrine_haste"]
 
 var world: World
 var kind := "rock"
@@ -165,7 +165,7 @@ func update(dt: float) -> void:
 		light.energy = 1.5 + 0.2 * sin(t * 9.0) + 0.12 * sin(t * 23.0)
 		if rng.randf() < dt * 14.0:
 			world.glow_fx.emit(global_position + Vector2(rng.randf_range(-8, 8), -26), Vector2(rng.randf_range(-15, 15), rng.randf_range(-110, -60)), rng.randf_range(0.8, 1.6), rng.randf_range(1.5, 3.2), Color(3.0, 1.2, 0.35), Particles.EMBER, 0.6)
-	if kind == "sigil" and rng.randf() < dt * 20.0:
+	if (kind == "sigil" or kind == "town_portal") and rng.randf() < dt * 20.0:
 		var a6 := rng.randf() * TAU
 		world.glow_fx.emit(global_position + Vector2(cos(a6), sin(a6) * 0.5) * 40.0, Vector2(0, -120), 1.0, 2.4, Color(0.8, 1.8, 3.0), Particles.EMBER, 0.4)
 	if kind == "waypoint" and rng.randf() < dt * 10.0:
@@ -600,6 +600,8 @@ func _draw_glow() -> void:
 				var a := t * (1.2 + i * 0.4) + i
 				glow.draw_arc(Vector2.ZERO, 70 - i * 13, a, a + PI * 1.3, 40, Color(3.0, 1.0 + i * 0.3, 0.25, 0.7), 4.0, true)
 			glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		"sigil", "town_portal":
+			_draw_recall_portal()
 		"crown":
 			if not used:
 				_crown_shard(Vector2(0, -50.0 + sin(t * 2.0) * 5.0), 1.3)
@@ -632,6 +634,35 @@ func _draw_glow() -> void:
 				var pulse := 0.7 + 0.3 * sin(t * 3.0)
 				glow.draw_circle(Vector2(0, -48), 9, Color(c.r * 3.0, c.g * 3.0, c.b * 3.0, pulse), true, -1.0, true)
 				glow.draw_circle(Vector2(0, -48), 22, Color(c.r, c.g, c.b, 0.15 * pulse), true, -1.0, true)
+
+
+## The town portal opened by the recall: it unfolds on the ground, spins, throws a column of light
+## upward, and in its last moments draws the hero in.
+func _draw_recall_portal() -> void:
+	var open := clampf(t / 0.7, 0.0, 1.0)
+	open = 1.0 - pow(1.0 - open, 3.0)
+	var pull := 0.0
+	if kind == "sigil" and world.recall_t > 0.0:
+		pull = clampf(1.0 - world.recall_t / 0.6, 0.0, 1.0)
+	var rx := 54.0 * open
+	var ry := 27.0 * open
+	# the light on the ground and the column rising from it
+	glow.draw_texture_rect(Ink.soft_tex(), Rect2(-rx * 1.5, -ry * 1.7, rx * 3.0, ry * 3.4), false, Color(0.3, 0.8, 2.6, 0.55 + 0.15 * sin(t * 6.0)))
+	glow.draw_texture_rect(Ink.soft_tex(), Rect2(-rx * 0.55, -150.0 * open, rx * 1.1, 150.0 * open), false, Color(0.5, 1.2, 3.2, 0.5))
+	# the spinning rings, drawn as short straight strokes
+	for ring in 4:
+		var k := 1.0 - ring * 0.2
+		var spin := t * (2.2 + ring * 0.9) * (1.0 if ring % 2 == 0 else -1.0)
+		var segs := PackedVector2Array()
+		var n := 18
+		for i in n:
+			var a0 := spin + TAU * i / n
+			var a1 := a0 + TAU / n * 0.55
+			segs.append(Vector2(cos(a0) * rx * k, sin(a0) * ry * k))
+			segs.append(Vector2(cos(a1) * rx * k, sin(a1) * ry * k))
+		glow.draw_multiline(segs, Color(0.7, 1.7, 3.4, 0.85 - ring * 0.12), 3.0 - ring * 0.4, true)
+	# a bright eye at the centre
+	glow.draw_texture_rect(Ink.soft_tex(), Rect2(-rx * 0.4, -ry * 0.4, rx * 0.8, ry * 0.8), false, Color(2.2, 3.0, 4.0, 0.7 + 0.3 * pull))
 
 
 func _crown_shard(p: Vector2, s: float) -> void:

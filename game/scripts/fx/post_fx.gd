@@ -54,7 +54,7 @@ func apply_zone(zd: Dictionary, instant := false) -> void:
 	# Mist takes the colour of the air, warmed or chilled a little by whatever glows in the ground.
 	var fog := Color(m.r, m.g, m.b).lerp(Color(v.r / vmax, v.g / vmax, v.b / vmax), 0.18) * 0.2
 	_target = {"fog_color": Vector3(fog.r, fog.g, fog.b), "fog_amount": float(look.fog), "heat": float(look.heat),
-		"saturation": float(look.sat), "shadow_tint": Vector3(look.shadow.r, look.shadow.g, look.shadow.b),
+		"saturation": float(look.sat), "exposure": 0.62 if int(zd.get("pattern", 0.0)) in [1, 5] else 0.8, "shadow_tint": Vector3(look.shadow.r, look.shadow.g, look.shadow.b),
 		"high_tint": Vector3(look.high.r, look.high.g, look.high.b)}
 	if instant or _cur.is_empty():
 		_cur = _target.duplicate()
@@ -77,6 +77,7 @@ func update(delta: float, cam: Camera2D) -> void:
 	mat.set_shader_parameter("hurt", hurt)
 	var q: float = Game.quality_factor()
 	# On the lowest setting the lens fringe is dropped: it costs two more reads of the screen per pixel.
+	mat.set_shader_parameter("brightness", clampf(float(Game.settings.get("brightness", 1.0)), 0.5, 2.0))
 	mat.set_shader_parameter("grain", 0.05 if q > 0.3 else 0.035)
 	mat.set_shader_parameter("fringe", 0.0011 if q > 0.3 else 0.0)
 

@@ -32,7 +32,7 @@ const TIPS := {
 	"waypoint": {"title": "Waypoints", "demo": "waypoint",
 		"text": "Light a waypoint to make it a place you can travel to. From any waypoint you can jump to any other one you have already visited. You cannot travel to places you have not been."},
 	"recall": {"title": "Recall", "demo": "recall",
-		"text": "Press T to channel a ground sigil for three seconds and be carried back to the village. Any damage interrupts it, so use it from a safe spot."},
+		"text": "Press T to open a portal and, after three seconds, be carried back to the village. Any damage interrupts it, so use it from a safe spot. A portal waits in the village: step into it to return to the exact place you left."},
 	"map": {"title": "The map", "demo": "map",
 		"text": "Press Tab. The whole world is outlined, and the parts you have explored fill in. Click on the big map to place a marker, and a trail will lead you to it. Right-click removes it."},
 	"skillpoint": {"title": "Skill points", "demo": "skilltree",

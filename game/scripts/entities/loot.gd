@@ -32,6 +32,9 @@ var label: Node2D
 var glow: Node2D
 var light: PointLight2D
 var _seed := 0.0
+## How far this name tag is pushed up so it does not sit on top of its neighbours' tags.
+var tag_dy := 0.0
+var tag_w := 0.0
 
 
 func _ready() -> void:
@@ -84,7 +87,7 @@ func under_cursor(m: Vector2) -> bool:
 	if gold > 0 or t < 0.4:
 		return false
 	var d := m - global_position
-	return d.x > -58.0 and d.x < 58.0 and d.y > -60.0 and d.y < 16.0
+	return d.x > -58.0 and d.x < 58.0 and d.y > -60.0 + tag_dy and d.y < 16.0
 
 
 ## Clicked: take it, if the player is close enough and has room.
@@ -199,7 +202,8 @@ func _draw_label() -> void:
 	var f := Game.font_body_bold
 	var txt := String(item.name)
 	var w := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-	var p := Vector2(-w * 0.5, -48.0 - _bounce())
+	tag_w = w + 28.0
+	var p := Vector2(-w * 0.5, -48.0 - _bounce() + tag_dy)
 	var c := color()
 	label.draw_rect(Rect2(p.x - 5, p.y - 14, w + 10, 19), Color(0, 0, 0, 0.55))
 	label.draw_string(f, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, c)

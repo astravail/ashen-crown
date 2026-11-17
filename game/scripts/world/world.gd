@@ -14,6 +14,7 @@ signal crown_taken
 signal door_enter(interior_idx: int)
 signal door_exit
 signal recall_done
+signal portal_return(pos: Vector2)
 signal act_entered(act: int)
 
 const CELL := 64.0
@@ -45,6 +46,10 @@ var hovered_loot: Loot = null
 var recall_t := 0.0
 var recall_cd := 0.0
 var recall_prop: Prop
+## Where the hero stood when recalling, and the portal left in the village that leads back there.
+var recall_origin := Vector2.ZERO
+var town_portal: Prop
+var return_pos := Vector2.ZERO
 var objective_pos := Vector2.ZERO
 var guide_pts := PackedVector2Array()
 var _astar: AStarGrid2D
@@ -184,7 +189,7 @@ func _cell_pos(c: Vector2i) -> Vector2:
 
 ## The old ambient was far too dark to read the ground by; lift it a little.
 static func _lift(c: Color) -> Color:
-	return Color(minf(c.r * 1.4, 1.0), minf(c.g * 1.35, 1.0), minf(c.b * 1.3, 1.0), c.a)
+	return Color(minf(c.r * 1.2, 1.0), minf(c.g * 1.17, 1.0), minf(c.b * 1.13, 1.0), c.a)
 
 
 func _build_layers() -> void:
@@ -294,15 +299,9 @@ func _build_layers() -> void:
 	post.setup(self)
 	post.apply_zone(map.regions[0].zd, true)
 
-	# Show the outline of the whole map from the start; explored ground fills in as you walk.
+	# The map starts empty: only ground you have walked on fills in, so everything else is found by exploring.
 	minimap_img = Image.create(map.w, map.h, false, Image.FORMAT_RGBA8)
 	minimap_img.fill(Color(0, 0, 0, 0))
-	for y in range(1, map.h - 1):
-		for x in range(1, map.w - 1):
-			if map.is_floor(x, y):
-				continue
-			if map.is_floor(x + 1, y) or map.is_floor(x - 1, y) or map.is_floor(x, y + 1) or map.is_floor(x, y - 1):
-				minimap_img.set_pixel(x, y, Color(0.85, 0.65, 0.45, 0.32))
 	minimap_tex = ImageTexture.create_from_image(minimap_img)
 	explored.resize(map.w * map.h)
 	flow.resize(map.w * map.h)
@@ -311,23 +310,24 @@ func _build_layers() -> void:
 
 func _build_ambient() -> void:
 	var ash := CPUParticles2D.new()
-	ash.amount = int(260 * Game.quality_factor())
+	ash.amount = int(120 * Game.quality_factor())
 	ash.lifetime = 7.0
 	ash.preprocess = 7.0
 	ash.local_coords = false
 	ash.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	ash.emission_rect_extents = Vector2(900, 600)
-	ash.direction = Vector2(0.4, 1.0)
-	ash.spread = 25.0
-	ash.initial_velocity_min = 12.0
-	ash.initial_velocity_max = 34.0
-	ash.gravity = Vector2(8, 6)
+	# a warm wind carries the ash sideways and a little up, so it never reads as falling snow
+	ash.direction = Vector2(1.0, -0.12)
+	ash.spread = 18.0
+	ash.initial_velocity_min = 40.0
+	ash.initial_velocity_max = 110.0
+	ash.gravity = Vector2(14, -3)
 	ash.texture = Ink.soft_tex()
-	ash.scale_amount_min = 0.07
-	ash.scale_amount_max = 0.17
+	ash.scale_amount_min = 0.04
+	ash.scale_amount_max = 0.1
 	ash.angular_velocity_min = -90
 	ash.angular_velocity_max = 90
-	ash.color = Color(0.8, 0.77, 0.74, 0.55)
+	ash.color = Color(0.42, 0.36, 0.32, 0.6)
 	var ramp := Gradient.new()
 	ramp.offsets = PackedFloat32Array([0.0, 0.15, 0.8, 1.0])
 	ramp.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
@@ -1384,7 +1384,31 @@ func _scatter(pos: Vector2) -> Vector2:
 	return pos
 
 
+## Name tags of gear lying close together are stacked, so each one can be read.
+func _stack_loot_tags() -> void:
+	var tags: Array[Loot] = []
+	for l in loots:
+		if l.gold == 0 and not l.done and l.global_position.distance_squared_to(camera.global_position) < 1000000.0:
+			tags.append(l)
+	tags.sort_custom(func(a: Loot, b: Loot): return a.global_position.x < b.global_position.x)
+	for i in tags.size():
+		var a := tags[i]
+		var dy := 0.0
+		var moved := true
+		while moved and dy > -110.0:
+			moved = false
+			for j in i:
+				var b := tags[j]
+				if absf(a.global_position.x - b.global_position.x) < (a.tag_w + b.tag_w) * 0.5 \
+						and absf((a.global_position.y + dy) - (b.global_position.y + b.tag_dy)) < 22.0:
+					dy -= 22.0
+					moved = true
+					break
+		a.tag_dy = dy
+
+
 func _update_hover_loot() -> void:
+	_stack_loot_tags()
 	hovered_loot = null
 	if attract or player == null or player.dead or get_tree().paused:
 		return
@@ -1626,6 +1650,7 @@ func start_recall() -> bool:
 		banner.emit("You cannot leave", "The arena holds you")
 		return false
 	recall_t = 3.0
+	recall_origin = player.global_position
 	recall_prop = add_prop("sigil", player.global_position)
 	recall_prop.radius = 0.0
 	interactives.erase(recall_prop)
@@ -1633,8 +1658,29 @@ func start_recall() -> bool:
 	return true
 
 
+## Leaves a portal in the village that leads back to where the hero recalled from.
+func open_town_portal(back_to: Vector2) -> void:
+	close_town_portal()
+	return_pos = back_to
+	var at: Vector2 = map.regions[0].pois.waypoint + Vector2(-110, 70)
+	town_portal = add_prop("town_portal", at)
+	town_portal.radius = 0.0
+	interactives.erase(town_portal)
+	Sfx.play("summon", -6.0, 0.0, 1.1)
+
+
+func close_town_portal() -> void:
+	if town_portal and is_instance_valid(town_portal):
+		town_portal.queue_free()
+		props.erase(town_portal)
+	town_portal = null
+
+
 func cancel_recall() -> void:
 	recall_t = 0.0
+	if player:
+		player.modulate.a = 1.0
+		player.scale = Vector2.ONE
 	if recall_prop and is_instance_valid(recall_prop):
 		recall_prop.queue_free()
 		props.erase(recall_prop)
@@ -1643,6 +1689,11 @@ func cancel_recall() -> void:
 
 func _update_recall(dt: float) -> void:
 	recall_cd = maxf(0.0, recall_cd - dt)
+	if town_portal and is_instance_valid(town_portal) and village and not player.dead:
+		if player.global_position.distance_to(town_portal.global_position) < 46.0 and town_portal.t > 0.8:
+			var dest := return_pos
+			close_town_portal()
+			portal_return.emit(dest)
 	if Input.is_action_just_pressed("recall") and not get_tree().paused:
 		start_recall()
 	if recall_t <= 0.0:
@@ -1650,12 +1701,16 @@ func _update_recall(dt: float) -> void:
 	if player.dead or player.hurt_t > 0.0:
 		cancel_recall()
 		banner.emit("Recall interrupted", "")
-		recall_cd = 4.0
+		recall_cd = 1.0
 		return
 	recall_t -= dt
+	# in the last moments the portal draws the hero in
+	var pull := clampf(1.0 - recall_t / 0.6, 0.0, 1.0)
+	player.modulate.a = 1.0 - pull * 0.9
+	player.scale = Vector2.ONE * (1.0 - pull * 0.45)
 	if recall_t <= 0.0:
 		cancel_recall()
-		recall_cd = 20.0
+		recall_cd = 0.0
 		Voice.bark("player", "recall", "", 5.0)
 		recall_done.emit()
 
