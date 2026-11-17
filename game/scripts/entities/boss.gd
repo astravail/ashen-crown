@@ -37,7 +37,7 @@ func intro() -> void:
 	intro_t = 2.6
 	Sfx.play("roar", 0.0)
 	world.shake(16.0)
-	world.banner.emit(display_name, "Every king burns.")
+	world.banner.emit(display_name, "Nothing stays buried.")
 	world.glow_fx.burst(global_position + Vector2(0, -100), 60, Color(3.0, 1.0, 0.25), 100, 500, 1.0, 3.0, Particles.SPARK)
 
 

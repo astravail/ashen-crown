@@ -8,6 +8,7 @@ Spilleren er en av de få som overlevde, og må samle bitene av kronen for å kn
 
 ## Slagord
 
+- *"Nothing stays buried."* (hovedslagord)
 - *"Every king burns."*
 - *"From ash, a crown. From the crown, ruin."*
 - *"Claim the throne. Pay the price."*

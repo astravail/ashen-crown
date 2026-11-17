@@ -143,7 +143,7 @@ func show_title() -> void:
 	var logo := Logo.new()
 	logo.custom_minimum_size = Vector2(760, 300)
 	v.add_child(logo)
-	var tag := _label("Every king burns.", Game.font_italic, 30, Color(0.85, 0.72, 0.6))
+	var tag := _label("Nothing stays buried.", Game.font_italic, 30, Color(0.85, 0.72, 0.6))
 	v.add_child(tag)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 50)
