@@ -414,6 +414,12 @@ func _load_records() -> void:
 			records[k] = cfg.get_value("records", k, records[k])
 
 
+## Wipes the lifetime statistics (runs, wins, best zone, fastest win, fallen). Saved characters are untouched.
+func reset_records() -> void:
+	records = {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0}
+	save_records()
+
+
 func save_records() -> void:
 	var cfg := ConfigFile.new()
 	for k in records.keys():

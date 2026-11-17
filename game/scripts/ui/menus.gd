@@ -825,6 +825,19 @@ func _settings_extra(grid: GridContainer) -> void:
 		Game.settings.tutorials = true
 		Sfx.play("ui_move", -8.0, 0.0), 220.0, 36.0)
 	grid.add_child(rb)
+	grid.add_child(_label("Statistics", Game.font_body, 22, Game.C_TEXT))
+	var armed := [false]
+	var reset_b: Button
+	reset_b = _button("Reset statistics", func():
+		if not armed[0]:
+			armed[0] = true
+			reset_b.text = "Click again to confirm"
+		else:
+			armed[0] = false
+			Game.reset_records()
+			reset_b.text = "Statistics reset"
+		Sfx.play("ui_move", -8.0, 0.0), 220.0, 36.0)
+	grid.add_child(reset_b)
 	opt.call("FPS counter corner", ["Top left", "Top right", "Bottom left", "Bottom right"], int(Game.settings.fps_corner), func(i: int):
 		Game.settings.fps_corner = i)
 	if Game.in_run:
