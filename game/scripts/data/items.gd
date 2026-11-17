@@ -96,12 +96,12 @@ const LEGENDS := [
 
 ## Rarity weights: common, magic, rare, ashforged.
 const TABLES := {
-	"normal": [60.0, 32.0, 7.8, 0.2],
-	"elite": [0.0, 55.0, 40.0, 5.0],
-	"champion": [0.0, 0.0, 88.0, 12.0],
-	"chest": [30.0, 50.0, 19.0, 1.0],
-	"iron": [0.0, 45.0, 50.0, 5.0],
-	"quest": [0.0, 30.0, 62.0, 8.0],
+	"normal": [60.0, 32.0, 7.9, 0.1],
+	"elite": [0.0, 55.0, 43.0, 2.0],
+	"champion": [0.0, 0.0, 95.0, 5.0],
+	"chest": [30.0, 50.0, 19.7, 0.3],
+	"iron": [0.0, 45.0, 53.0, 2.0],
+	"quest": [0.0, 30.0, 66.0, 4.0],
 	"shop": [20.0, 55.0, 25.0, 0.0],
 }
 
@@ -138,6 +138,8 @@ static func roll_rarity(table: String, mf := 0.0, min_r := 0) -> int:
 	w[1] = float(w[1]) * (1.0 + m)
 	w[2] = float(w[2]) * (1.0 + m * 1.5)
 	w[3] = float(w[3]) * (1.0 + m * 2.0)
+	# Ashforged gear is a late find: none below level 8, full chance from level 30
+	w[3] = float(w[3]) * clampf((float(Game.stats.get("level", 1)) - 8.0) / 22.0, 0.0, 1.0)
 	for i in min_r:
 		w[i] = 0.0
 	var total := 0.0

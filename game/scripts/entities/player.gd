@@ -212,7 +212,7 @@ func on_kill(e: Enemy, gained_xp: float) -> void:
 	if e.is_champion:
 		gain = 40.0
 	gain *= pow(1.25, mod("ashborn")) * (2.0 if frag("pyre") else 1.0) * (1.0 + Game.gear_stat("ash") / 100.0)
-	if ult_t <= 0.0:
+	if ult_t <= 0.0 and level >= Data.ability_unlock(4, cls):
 		ash = minf(100.0, ash + gain)
 	if cls == "gravecaller" and e.global_position.distance_to(global_position) < 450.0:
 		resource = minf(res_max, resource + 9.0)
@@ -423,6 +423,10 @@ func _update_resource(dt: float) -> void:
 
 
 func _update_ash(dt: float) -> void:
+	if level < Data.ability_unlock(4, cls):
+		ash = 0.0
+		ash_full_t = 0.0
+		return
 	if ash >= 100.0:
 		ash_full_t += dt
 		var limit := 10.0 if not frag("pyre") else 6.0
