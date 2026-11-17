@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.7"
+const VERSION := "0.5.8"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -118,6 +118,10 @@ var update_url := ""
 
 ## What changed in each version, newest first. Shown in What's new, and once after every update.
 const RELEASE_NOTES := [
+	{"v": "0.5.8", "items": [
+		"Abilities unlock as you level: secondary at 3, skill 1 at 6, skill 2 at 10 and your ultimate at 15. The Abilities tab shows what is still locked.",
+		"The maximum level is 60. At the top you can prestige from the skills screen: level and skills reset, and each rank (up to 10) gives lasting damage, life, gold and magic find.",
+		"Balance pass on drops, chance-on-hit perks and enemy behaviour."]},
 	{"v": "0.5.7", "items": [
 		"Enemies move like individuals: they circle, hesitate, and sometimes fall back after an attack or when struck, instead of running straight at you.",
 		"Gear can now carry chance-on-hit perks: terrify, stun, chill, ignite and a second strike. They are capped so they stay balanced.",
@@ -174,6 +178,7 @@ func new_run(cls: String) -> void:
 	char_id = "c%d" % int(Time.get_unix_time_from_system())
 	world_seed = randi()
 	player_state = {}
+	prestige = 0
 	class_id = cls
 	zone_index = 0
 	fragments.clear()
@@ -216,6 +221,8 @@ const MAX_MARKERS := 5
 var char_id := ""
 var world_seed := 0
 var player_state := {}
+## How many times this character has prestiged: each rank is a lasting bonus, see Data.PRESTIGE_MAX_RANKS.
+var prestige := 0
 var hardcore := false
 ## Hardcore: one life. In return, everything comes a bit faster.
 const HC_PERKS := {"xp": 1.25, "gold": 1.2, "mf": 20.0}
@@ -284,8 +291,16 @@ func proc(k: String) -> float:
 	return minf(float(PROC_CAP.get(k, 0.0)), gear_stat(k) / 100.0)
 
 
+func prestige_ranks() -> int:
+	return mini(prestige, Data.PRESTIGE_MAX_RANKS)
+
+
 func gear_stat(k: String) -> float:
-	return float(gear.get(k, 0.0))
+	var v := float(gear.get(k, 0.0))
+	# prestige adds to gold and magic find as if it were gear
+	if k == "mf" or k == "gold":
+		v += 3.0 * prestige_ranks()
+	return v
 
 
 func recalc_gear() -> void:
@@ -890,7 +905,7 @@ func save_character() -> void:
 	var d := {"v": 1, "name": hero_name, "cls": class_id, "hardcore": hardcore, "difficulty": difficulty, "look": look,
 		"gold": gold, "inv": inv, "equipment": equipment, "quests": quests, "waypoints": waypoints, "zone_state": zone_state,
 		"max_zone": max_zone, "acts_seen": acts_seen, "stats": stats, "fragments": Array(fragments), "world_seed": world_seed,
-		"player": player_state, "markers": markers, "saved": int(Time.get_unix_time_from_system())}
+		"player": player_state, "prestige": prestige, "markers": markers, "saved": int(Time.get_unix_time_from_system())}
 	var f := FileAccess.open("%s/%s.save" % [SAVE_DIR, char_id], FileAccess.WRITE)
 	if f:
 		f.store_var(d, false)
@@ -948,6 +963,7 @@ func load_character(id: String) -> bool:
 	max_zone = int(d.max_zone)
 	acts_seen = d.acts_seen
 	stats = d.stats
+	prestige = int(d.get("prestige", 0))
 	fragments.assign(d.fragments)
 	world_seed = int(d.world_seed)
 	player_state = d.player

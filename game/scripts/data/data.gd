@@ -228,6 +228,19 @@ const GRIND := {
 	"repair_mult": 1.0,
 }
 
+const MAX_LEVEL := 60
+## The level at which each ability (primary, secondary, skill 1, skill 2, ultimate) becomes available.
+const ABILITY_UNLOCK := [1, 3, 6, 10, 15]
+## Each prestige rank is worth this much damage and life, and this much gold and magic find, up to rank 10.
+const PRESTIGE_MAX_RANKS := 10
+
+
+static func ability_unlock(i: int, cls: String) -> int:
+	if cls == "crownbearer":
+		return 1
+	return int(ABILITY_UNLOCK[clampi(i, 0, 4)])
+
+
 static func xp_for_level(level: int) -> float:
 	return 24.0 + 16.0 * level + 1.2 * level * level
 

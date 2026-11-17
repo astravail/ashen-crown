@@ -330,6 +330,8 @@ class AbilityCard extends Control:
 	var attached := ""
 	var selected := false
 	var fixed := false
+	var unlock := 1
+	var hero_level := 1
 
 	func _init() -> void:
 		custom_minimum_size = Vector2(520, 108)
@@ -356,6 +358,11 @@ class AbilityCard extends Control:
 		Icons.draw(self, ability.id, icon_box.get_center(), 56.0, Color(1.0, 0.82, 0.6))
 		draw_string(Game.font_display_bold, Vector2(98, 28), String(ability.name).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 300, 19, Color(0.97, 0.88, 0.76))
 		draw_multiline_string(Game.font_body, Vector2(98, 48), String(ability.desc), HORIZONTAL_ALIGNMENT_LEFT, 400, 15, 3, Color(0.72, 0.68, 0.64))
+		var locked := hero_level < unlock
+		if locked:
+			draw_rect(r, Color(0, 0, 0, 0.55))
+			draw_string(Game.font_display_bold, Vector2(98, 100), "UNLOCKS AT LEVEL %d" % unlock, HORIZONTAL_ALIGNMENT_LEFT, 360, 15, Color(1.0, 0.6, 0.35))
+			return
 		var meta := "Cooldown %s s" % ("%.1f" % float(ability.cd))
 		if float(ability.cost) != 0.0 and class_id != "pyrewitch":
 			meta += "   ·   Cost %d" % int(ability.cost)
@@ -429,11 +436,16 @@ func show_abilities() -> void:
 		var card := AbilityCard.new()
 		card.ability = abil[ai]
 		card.class_id = cls
+		card.unlock = Data.ability_unlock(ai, cls)
+		card.hero_level = world.player.level if world and world.player else 1
 		card.selected = _sel_ability == ai
 		var slot_of := map.find(ai)
 		card.attached = Game.input_label(keys[slot_of], false) if slot_of >= 0 else ""
 		var idx := ai
 		card.chosen.connect(func():
+			if card.hero_level < card.unlock:
+				Sfx.play("ui_move", -4.0, 0.0, 0.6)
+				return
 			Sfx.play("ui_select", -6.0, 0.0)
 			_sel_ability = -1 if _sel_ability == idx else idx
 			show_abilities())
@@ -978,6 +990,17 @@ func show_skills() -> void:
 	rb.disabled = Game.gold < cost or p.mods.is_empty() or not world.village
 	foot.add_child(rb)
 	foot.add_child(_label("Resetting is possible in the village only." if not world.village else "", Game.font_italic, 16, Color(0.55, 0.5, 0.46)))
+	if p.level >= Data.MAX_LEVEL:
+		var armed := [false]
+		var pb: Button
+		pb = _button("Prestige  (rank %d)" % (Game.prestige + 1), func():
+			if not armed[0]:
+				armed[0] = true
+				pb.text = "Reset level and skills?  Click again"
+				return
+			if p.prestige_up():
+				show_skills(), 360.0)
+		foot.add_child(pb)
 	foot.add_child(_button("Close", close, 200.0))
 	if first:
 		first.grab_focus.call_deferred()

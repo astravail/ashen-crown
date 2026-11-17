@@ -100,7 +100,7 @@ func frag(id: String) -> bool:
 
 
 func dmg_mult() -> float:
-	var m := 1.0 + 0.12 * mod("ferocity") + Game.gear_stat("dmg") / 100.0
+	var m := 1.0 + 0.12 * mod("ferocity") + Game.gear_stat("dmg") / 100.0 + 0.05 * Game.prestige_ranks()
 	if frag("hunger"):
 		m += 0.3
 	if buffs.has("fury"):
@@ -163,7 +163,7 @@ func ult_duration(base: float) -> float:
 
 func recompute() -> void:
 	var ratio := hp / max_hp if max_hp > 0.0 else 1.0
-	var m := base_hp * (1.0 + 0.2 * mod("vigor")) + Game.gear_stat("hp")
+	var m := (base_hp * (1.0 + 0.2 * mod("vigor")) + Game.gear_stat("hp")) * (1.0 + 0.05 * Game.prestige_ranks())
 	if frag("hunger"):
 		m *= 0.8
 	if frag("iron"):
@@ -222,8 +222,11 @@ func on_kill(e: Enemy, gained_xp: float) -> void:
 
 
 func gain_xp(amount: float) -> void:
+	if level >= Data.MAX_LEVEL:
+		xp = 0.0
+		return
 	xp += amount
-	while xp >= xp_next:
+	while xp >= xp_next and level < Data.MAX_LEVEL:
 		xp -= xp_next
 		level += 1
 		xp_next = Data.xp_for_level(level)
@@ -235,6 +238,30 @@ func gain_xp(amount: float) -> void:
 		Sfx.play("levelup", -2.0)
 		Voice.bark("player", "levelup", "", 10.0)
 		world.level_up.emit()
+		if level >= Data.MAX_LEVEL:
+			xp = 0.0
+			world.banner.emit("Maximum level", "You can prestige from the skills screen")
+			break
+
+
+## At the top level the hero can start over for a lasting bonus. Gear, gold and quests stay; level and skills reset.
+func prestige_up() -> bool:
+	if level < Data.MAX_LEVEL:
+		return false
+	Game.prestige += 1
+	level = 1
+	xp = 0.0
+	xp_next = Data.xp_for_level(1)
+	pending_levels = 0
+	mods.clear()
+	Game.stats.level = 1
+	recompute()
+	hp = max_hp
+	world.glow_fx.ring(global_position, 200.0, Color(3.0, 2.2, 0.6, 0.9), 0.9)
+	world.glow_fx.burst(global_position, 50, Color(3.0, 2.0, 0.5), 100, 420, 1.0, 3.0, Particles.SPARK)
+	Sfx.play("levelup", 0.0)
+	world.banner.emit("Prestige %d" % Game.prestige, "Stronger, and starting again")
+	return true
 
 
 func revive() -> void:
@@ -458,6 +485,8 @@ func slot_ability(slot: int) -> int:
 
 
 func can_cast(i: int) -> bool:
+	if level < Data.ability_unlock(i, cls):
+		return false
 	var a: Dictionary = abilities[i]
 	if i == 4:
 		return ash >= 100.0 and ult_t <= 0.0

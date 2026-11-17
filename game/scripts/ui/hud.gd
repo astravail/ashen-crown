@@ -345,6 +345,10 @@ func _slot(r: Rect2, slot: int, p: Player) -> void:
 	if lacking:
 		col = Color(0.6, 0.3, 0.28)
 	Icons.draw(self, a.id, r.get_center(), r.size.x * 0.82, col)
+	var need := Data.ability_unlock(i, p.cls)
+	if p.level < need:
+		draw_rect(r, Color(0, 0, 0, 0.7))
+		_center_text(r.get_center().x, r.get_center().y + 6, "LV %d" % need, 16, Color(0.8, 0.6, 0.4), Game.font_display_bold)
 	if i == 4:
 		var fill := p.ash / 100.0
 		if fill < 1.0:
@@ -419,7 +423,7 @@ func _draw_top(vs: Vector2) -> void:
 func _draw_left(p: Player) -> void:
 	var x := 32.0
 	var y := 44.0
-	_text(Vector2(x, y), "LEVEL %d" % p.level, 18, Color(0.9, 0.85, 0.78), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+	_text(Vector2(x, y), ("LEVEL %d%s%s" % [p.level, "  ·  MAX" if p.level >= Data.MAX_LEVEL else "", ("  ·  PRESTIGE %d" % Game.prestige) if Game.prestige > 0 else ""]), 18, Color(0.9, 0.85, 0.78), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 26
 	_text(Vector2(x, y), "%s  ·  %s" % [Game.hero_name, p.data.name], 16, Color(0.65, 0.6, 0.56), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 22
