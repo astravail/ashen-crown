@@ -49,10 +49,10 @@ var settings := {
 func class_unlocked(id: String) -> bool:
 	if not bool(Data.CLASSES[id].get("locked", false)):
 		return true
-	return int(records.get("wins", 0)) > 0
+	return int(records.get("wins", 0)) > 0 or bool(records.get("unlocked", false))
 
 
-var records := {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0}
+var records := {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0, "unlocked": false}
 
 # Current run
 var class_id := "knight"
@@ -416,7 +416,8 @@ func _load_records() -> void:
 
 ## Wipes the lifetime statistics (runs, wins, best zone, fastest win, fallen). Saved characters are untouched.
 func reset_records() -> void:
-	records = {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0}
+	var keep := bool(records.get("unlocked", false)) or int(records.get("wins", 0)) > 0
+	records = {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0, "unlocked": keep}
 	save_records()
 
 
