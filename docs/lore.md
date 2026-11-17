@@ -19,14 +19,24 @@ Spilleren er en av de få som overlevde, og må samle bitene av kronen for å kn
 - *Ashen Crown: Throne of Cinders*
 - *Ashen Crown: Requiem*
 
+## Tone
+
+Brutalt og blodig, i samme ånd som Diablo. Verden er fiendtlig, døden er stygg og kampene skal kjennes i magen:
+
+- Hvert treff spruter blod; store slag, kritiske treff og eksplosjoner river fiender i stykker
+- Blodpøler og levninger blir liggende lenge og tørker inn
+- Lyden er tung og våt: kjøtt, knasende bein, stønn fra døende, demoniske brøl
+- Kan skrus av i innstillingene («Blood and gore»)
+
 ## Soner
 
-| Sone | Beskrivelse |
-|---|---|
-| **Cinderfields** | Brente sletter fulle av glør |
-| **The Hollow Keep** | Den falne kongeborgen |
-| **Greyrot Marsh** | En myr kvalt av aske |
-| **The Pyre Below** | Underverdenen der kronen ble smidd |
+| Sone | Beskrivelse | Stemning (lyd) |
+|---|---|---|
+| **The Blackwood** | Mørk skog med galger og hengte menn | Vind i trærne, kråker, knirkende tau, ulving i det fjerne |
+| **The Hollow Keep** | Den falne kongeborgen | Rungende haller, drypp, fjerne stønn |
+| **The Catacombs** | Valdremors døde, som ikke ble liggende | Drypp, dyp drone, stønn som ekkoer |
+| **Greyrot Marsh** | En myr kvalt av aske | Bobler fra råtten, insekter, kråker |
+| **The Infernal Pyre** | Helvete under verden, der kronen ble smidd | Mullrende grunn, brølende flammer, skrik fra de fordømte |
 
 ## Visuell stil
 
