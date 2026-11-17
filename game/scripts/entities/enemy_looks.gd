@@ -2,6 +2,8 @@ class_name EnemyLooks
 ## What makes a world's own enemy look like itself: an accessory and a bit of animation on top of the
 ## archetype body. Drawn inside Enemy._draw, in the enemy's facing-right local space.
 
+const Ink := preload("res://scripts/fx/ink.gd")
+
 const HEAD := {"husk": Vector2(10, -40), "hound": Vector2(24, -16), "acolyte": Vector2(3, -40), "brute": Vector2(0, -68), "bloater": Vector2(12, -46), "wraith": Vector2(0, -48)}
 const BODY := {"husk": Vector2(4, -26), "hound": Vector2(0, -14), "acolyte": Vector2(0, -24), "brute": Vector2(0, -40), "bloater": Vector2(0, -26), "wraith": Vector2(0, -30)}
 
@@ -41,7 +43,7 @@ static func draw(e: Enemy, walk: float) -> void:
 		"thorns":
 			for i in 5:
 				var p := b + Vector2(-9 + i * 5, -8 - i * 3)
-				e.draw_colored_polygon(PackedVector2Array([p, p + Vector2(-4, -2), p + Vector2(-8, -12 - i)]), Color(0.3, 0.38, 0.2))
+				Ink.tri(e, p, p + Vector2(-4, -2), p + Vector2(-8, -12 - i), Color(0.3, 0.38, 0.2))
 		"antlers":
 			for s in [-1.0, 1.0]:
 				var base := h + Vector2(s * 4.0, -8)
@@ -55,13 +57,13 @@ static func draw(e: Enemy, walk: float) -> void:
 			for i in 4:
 				var x := -12.0 + i * 8.0
 				e.draw_line(Vector2(x, -2), Vector2(x + sin(t * 3.0 + i) * 4.0, 8 + (i % 2) * 3), Color(0.32, 0.2, 0.12), 3.0, true)
-			e.draw_circle(Vector2(0, 2), 14.0, Color(0.2, 0.14, 0.1, 0.8), true, -1.0, true)
+			Ink.dot(e, Vector2(0, 2), 14.0, Color(0.2, 0.14, 0.1, 0.8))
 		"helm_shield":
 			e.draw_arc(h + Vector2(0, 1), 8.0, PI, TAU, 14, Color(0.5, 0.52, 0.6), 4.0, true)
 			e.draw_line(h + Vector2(0, -7), h + Vector2(0, 4), Color(0.4, 0.42, 0.5), 2.0)
 			e.draw_colored_polygon(PackedVector2Array([b + Vector2(-20, -10), b + Vector2(-8, -10), b + Vector2(-9, 4), b + Vector2(-14, 10), b + Vector2(-20, 4)]), Color(0.28, 0.3, 0.38))
 		"mitre":
-			e.draw_colored_polygon(PackedVector2Array([h + Vector2(-6, -5), h + Vector2(6, -5), h + Vector2(0, -24)]), Color(0.65, 0.2, 0.15))
+			Ink.tri(e, h + Vector2(-6, -5), h + Vector2(6, -5), h + Vector2(0, -24), Color(0.65, 0.2, 0.15))
 			e.draw_line(h + Vector2(0, -22), h + Vector2(0, -8), Color(0.9, 0.8, 0.5), 1.5)
 		"spiked_collar":
 			for i in 4:
@@ -78,13 +80,13 @@ static func draw(e: Enemy, walk: float) -> void:
 		"flies":
 			for i in 4:
 				var a := t * 4.0 + i * 1.57
-				e.draw_circle(b + Vector2(cos(a) * 24.0, sin(a * 1.3) * 18.0 - 6.0), 1.8, Color(0.05, 0.05, 0.05), true, -1.0, true)
+				Ink.dot(e, b + Vector2(cos(a) * 24.0, sin(a * 1.3) * 18.0 - 6.0), 1.8, Color(0.05, 0.05, 0.05))
 		"ribs":
 			for i in 4:
 				e.draw_line(b + Vector2(-8, -12 + i * 5), b + Vector2(8, -12 + i * 5), Color(0.85, 0.82, 0.72), 2.0, true)
-			e.draw_circle(h, 5.5, Color(0.88, 0.85, 0.76), true, -1.0, true)
-			e.draw_circle(h + Vector2(-2, -1), 1.4, Color(0.02, 0.02, 0.02), true, -1.0, true)
-			e.draw_circle(h + Vector2(2, -1), 1.4, Color(0.02, 0.02, 0.02), true, -1.0, true)
+			Ink.dot(e, h, 5.5, Color(0.88, 0.85, 0.76))
+			Ink.dot(e, h + Vector2(-2, -1), 1.4, Color(0.02, 0.02, 0.02))
+			Ink.dot(e, h + Vector2(2, -1), 1.4, Color(0.02, 0.02, 0.02))
 		"chains":
 			for i in 3:
 				var p3 := b + Vector2(-10 + i * 10.0, 4 + sin(t * 2.0 + i) * 2.0)
@@ -94,17 +96,17 @@ static func draw(e: Enemy, walk: float) -> void:
 			for s in [-1.0, 1.0]:
 				for i in 3:
 					var p4 := b + Vector2(s * (14.0 + i * 3.0), -16 - i * 5)
-					e.draw_colored_polygon(PackedVector2Array([p4, p4 + Vector2(s * 4, 3), p4 + Vector2(s * 8, -10)]), Color(0.88, 0.85, 0.75))
+					Ink.tri(e, p4, p4 + Vector2(s * 4, 3), p4 + Vector2(s * 8, -10), Color(0.88, 0.85, 0.75))
 		"bone_pile":
 			for i in 5:
 				e.draw_line(Vector2(-14 + i * 7, 2), Vector2(-10 + i * 7, -3 - (i % 2) * 3), Color(0.85, 0.82, 0.72), 2.0, true)
 		"moss":
-			e.draw_circle(b + Vector2(-8, -12), 5.0, Color(0.2, 0.38, 0.16), true, -1.0, true)
-			e.draw_circle(b + Vector2(7, -6), 4.0, Color(0.24, 0.42, 0.18), true, -1.0, true)
+			Ink.dot(e, b + Vector2(-8, -12), 5.0, Color(0.2, 0.38, 0.16))
+			Ink.dot(e, b + Vector2(7, -6), 4.0, Color(0.24, 0.42, 0.18))
 		"bubbles":
 			for i in 4:
 				var ph := fmod(t * 0.9 + i * 0.27, 1.0)
-				e.draw_circle(b + Vector2(-10 + i * 7.0, -ph * 40.0), 2.5 * (1.0 - ph), Color(0.6, 0.85, 0.4, 1.0 - ph), true, -1.0, true)
+				Ink.dot(e, b + Vector2(-10 + i * 7.0, -ph * 40.0), 2.5 * (1.0 - ph), Color(0.6, 0.85, 0.4, 1.0 - ph))
 		"leeches":
 			for i in 3:
 				e.draw_line(b + Vector2(-6 + i * 6.0, -8), b + Vector2(-8 + i * 6.0 + sin(t * 5.0 + i) * 2.0, 3), Color(0.1, 0.12, 0.08), 3.0, true)
@@ -115,29 +117,29 @@ static func draw(e: Enemy, walk: float) -> void:
 		"drip":
 			for i in 3:
 				var ph2 := fmod(t * 1.2 + i * 0.33, 1.0)
-				e.draw_circle(b + Vector2(-8 + i * 8.0, -4 + ph2 * 14.0), 1.8, Color(0.4, 0.65, 0.9, 1.0 - ph2), true, -1.0, true)
+				Ink.dot(e, b + Vector2(-8 + i * 8.0, -4 + ph2 * 14.0), 1.8, Color(0.4, 0.65, 0.9, 1.0 - ph2))
 		"bell":
 			var sw := sin(t * 3.0) * 0.4
 			var bp := h + Vector2(12, 8)
 			e.draw_line(h + Vector2(4, 0), bp, Color(0.4, 0.32, 0.2), 1.5)
 			e.draw_set_transform(bp, sw, Vector2(e.facing.x * e.scale_mult, e.scale_mult))
 			e.draw_colored_polygon(PackedVector2Array([Vector2(-6, 6), Vector2(6, 6), Vector2(4, -4), Vector2(0, -8), Vector2(-4, -4)]), Color(0.7, 0.55, 0.2))
-			e.draw_circle(Vector2(0, 8), 1.8, Color(0.5, 0.4, 0.2), true, -1.0, true)
+			Ink.dot(e, Vector2(0, 8), 1.8, Color(0.5, 0.4, 0.2))
 		"barnacles":
 			for i in 5:
-				e.draw_circle(b + Vector2(-12 + i * 6.0, -10 + (i % 2) * 8.0), 2.5, Color(0.65, 0.68, 0.7), true, -1.0, true)
+				Ink.dot(e, b + Vector2(-12 + i * 6.0, -10 + (i % 2) * 8.0), 2.5, Color(0.65, 0.68, 0.7))
 		"lamp_helmet":
 			e.draw_arc(h + Vector2(0, 1), 8.0, PI, TAU, 14, Color(0.7, 0.55, 0.15), 4.0, true)
-			e.draw_circle(h + Vector2(7, -2), 3.0, Color(3.2, 2.4, 0.9), true, -1.0, true)
+			Ink.dot(e, h + Vector2(7, -2), 3.0, Color(3.2, 2.4, 0.9))
 			var hand := b + Vector2(14, -4)
 			e.draw_line(hand + Vector2(-6, 12), hand + Vector2(6, -14), Color(0.35, 0.28, 0.2), 2.5, true)
 			e.draw_line(hand + Vector2(1, -14), hand + Vector2(12, -10), Color(0.55, 0.55, 0.6), 3.0, true)
 		"soot":
 			for i in 4:
-				e.draw_circle(b + Vector2(-9 + i * 6.0, -6 + (i % 2) * 5.0), 3.5, Color(0.02, 0.02, 0.02, 0.6), true, -1.0, true)
+				Ink.dot(e, b + Vector2(-9 + i * 6.0, -6 + (i % 2) * 5.0), 3.5, Color(0.02, 0.02, 0.02, 0.6))
 		"boulders":
-			e.draw_circle(b + Vector2(-26, -14), 11.0, Color(0.36, 0.34, 0.32), true, -1.0, true)
-			e.draw_circle(b + Vector2(26, -14), 11.0, Color(0.32, 0.3, 0.28), true, -1.0, true)
+			Ink.dot(e, b + Vector2(-26, -14), 11.0, Color(0.36, 0.34, 0.32))
+			Ink.dot(e, b + Vector2(26, -14), 11.0, Color(0.32, 0.3, 0.28))
 		"rock_plates":
 			for i in 3:
 				var p5 := b + Vector2(-8 + i * 7.0, -12 + (i % 2) * 6.0)
@@ -149,30 +151,30 @@ static func draw(e: Enemy, walk: float) -> void:
 		"slag":
 			for i in 3:
 				var ph3 := fmod(t * 1.1 + i * 0.4, 1.0)
-				e.draw_circle(b + Vector2(18 + i * 3.0, -8 + ph3 * 22.0), 2.4 * (1.0 - ph3 * 0.5), hot, true, -1.0, true)
+				Ink.dot(e, b + Vector2(18 + i * 3.0, -8 + ph3 * 22.0), 2.4 * (1.0 - ph3 * 0.5), hot)
 		"eyes_many":
 			for i in 3:
-				e.draw_circle(h + Vector2(-4 + i * 4.0, -2 + (i % 2) * 4.0), 1.6, Color(1.0, 3.0, 2.8), true, -1.0, true)
+				Ink.dot(e, h + Vector2(-4 + i * 4.0, -2 + (i % 2) * 4.0), 1.6, Color(1.0, 3.0, 2.8))
 		"magma_boil":
 			for i in 4:
 				var ph4 := fmod(t * 1.3 + i * 0.25, 1.0)
-				e.draw_circle(b + Vector2(-10 + i * 7.0, -4 - ph4 * 12.0), 3.5 * (1.0 - ph4), hot, true, -1.0, true)
+				Ink.dot(e, b + Vector2(-10 + i * 7.0, -4 - ph4 * 12.0), 3.5 * (1.0 - ph4), hot)
 		"flame_mane":
 			for i in 5:
 				var f := 1.0 + 0.4 * sin(t * 10.0 + i)
 				var p6 := b + Vector2(-12 + i * 6.0, -8)
-				e.draw_colored_polygon(PackedVector2Array([p6, p6 + Vector2(6, 0), p6 + Vector2(3, -12 * f)]), Color(3.0, 1.3 + i * 0.1, 0.3))
+				Ink.tri(e, p6, p6 + Vector2(6, 0), p6 + Vector2(3, -12 * f), Color(3.0, 1.3 + i * 0.1, 0.3))
 		"straw":
-			e.draw_colored_polygon(PackedVector2Array([h + Vector2(-10, -6), h + Vector2(10, -6), h + Vector2(0, -16)]), Color(0.62, 0.5, 0.22))
+			Ink.tri(e, h + Vector2(-10, -6), h + Vector2(10, -6), h + Vector2(0, -16), Color(0.62, 0.5, 0.22))
 			e.draw_line(b + Vector2(8, -6), b + Vector2(22, -10), Color(0.62, 0.5, 0.22), 2.0)
 			e.draw_line(b + Vector2(-6, -6), b + Vector2(-20, -2), Color(0.62, 0.5, 0.22), 2.0)
 		"ash_cloud":
 			for i in 3:
 				var a3 := t * 1.5 + i * 2.1
-				e.draw_circle(b + Vector2(cos(a3) * 14.0, sin(a3) * 8.0 - 10.0), 6.0, Color(0.45, 0.43, 0.42, 0.35), true, -1.0, true)
+				Ink.glow(e, b + Vector2(cos(a3) * 14.0, sin(a3) * 8.0 - 10.0), 10.0, Color(0.45, 0.43, 0.42, 0.45))
 		"ash_trail":
 			for i in 4:
-				e.draw_circle(Vector2(-10 - i * 8.0, -8 - sin(t * 4.0 + i) * 3.0), 5.0 - i, Color(0.5, 0.48, 0.47, 0.4 - i * 0.08), true, -1.0, true)
+				Ink.dot(e, Vector2(-10 - i * 8.0, -8 - sin(t * 4.0 + i) * 3.0), 5.0 - i, Color(0.5, 0.48, 0.47, 0.4 - i * 0.08))
 		"mask_fan":
 			e.draw_colored_polygon(PackedVector2Array([h + Vector2(-5, -3), h + Vector2(7, -3), h + Vector2(5, 2), h + Vector2(-3, 2)]), Color(0.75, 0.55, 0.85))
 			for i in 3:
@@ -185,7 +187,7 @@ static func draw(e: Enemy, walk: float) -> void:
 			for i in 5:
 				var a4 := t * 1.2 + i * 1.26
 				var p8 := h + Vector2(cos(a4) * 12.0, -12.0 + sin(a4) * 4.0)
-				e.draw_colored_polygon(PackedVector2Array([p8, p8 + Vector2(2, -5), p8 + Vector2(4, 0)]), Color(1.6, 0.9, 2.2))
+				Ink.tri(e, p8, p8 + Vector2(2, -5), p8 + Vector2(4, 0), Color(1.6, 0.9, 2.2))
 		"gilded_collar":
 			e.draw_arc(h + Vector2(-8, 7), 5.0, 0.0, TAU, 10, Color(2.6, 1.9, 0.6), 2.5, true)
 		"wings":
@@ -197,7 +199,7 @@ static func draw(e: Enemy, walk: float) -> void:
 			for i in 6:
 				var a5 := TAU * i / 6.0 + t * 2.0
 				var p9 := b + Vector2(cos(a5) * 14.0, sin(a5) * 20.0)
-				e.draw_circle(p9, 3.0 + sin(t * 8.0 + i), hot, true, -1.0, true)
+				Ink.dot(e, p9, 3.0 + sin(t * 8.0 + i), hot)
 		"big_horns":
 			for s in [-1.0, 1.0]:
 				e.draw_polyline(PackedVector2Array([h + Vector2(s * 8, -6), h + Vector2(s * 18, -12), h + Vector2(s * 20, -26), h + Vector2(s * 14, -32)]), Color(0.75, 0.7, 0.6), 4.0, true)
@@ -205,22 +207,22 @@ static func draw(e: Enemy, walk: float) -> void:
 			for i in 3:
 				var f2 := 1.0 + 0.4 * sin(t * 9.0 + i)
 				var p10 := h + Vector2(-5 + i * 5.0, -6)
-				e.draw_colored_polygon(PackedVector2Array([p10, p10 + Vector2(5, 0), p10 + Vector2(2, -14 * f2)]), Color(3.0, 1.2 + i * 0.3, 0.3))
+				Ink.tri(e, p10, p10 + Vector2(5, 0), p10 + Vector2(2, -14 * f2), Color(3.0, 1.2 + i * 0.3, 0.3))
 		"ember_crown":
 			for i in 5:
 				var p11 := h + Vector2(-8 + i * 4.0, -8)
-				e.draw_colored_polygon(PackedVector2Array([p11, p11 + Vector2(4, 0), p11 + Vector2(2, -9 - (i % 2) * 4.0)]), Color(3.0, 1.6, 0.5))
+				Ink.tri(e, p11, p11 + Vector2(4, 0), p11 + Vector2(2, -9 - (i % 2) * 4.0), Color(3.0, 1.6, 0.5))
 		"king_helm":
 			e.draw_arc(h + Vector2(0, 1), 12.0, PI, TAU, 14, Color(0.3, 0.25, 0.25), 5.0, true)
 			e.draw_line(h + Vector2(0, -12), h + Vector2(-8 + sin(t * 3.0) * 3.0, -26), Color(0.7, 0.1, 0.08), 4.0, true)
 		"scepter":
 			var hnd := b + Vector2(16, -2)
 			e.draw_line(hnd + Vector2(0, 16), hnd + Vector2(0, -24), Color(0.3, 0.22, 0.15), 3.0, true)
-			e.draw_circle(hnd + Vector2(0, -26), 5.0 + sin(t * 6.0), Color(3.0, 1.3, 0.3), true, -1.0, true)
+			Ink.dot(e, hnd + Vector2(0, -26), 5.0 + sin(t * 6.0), Color(3.0, 1.3, 0.3))
 		"fire_tail":
 			for i in 4:
 				var f3 := 1.0 + 0.3 * sin(t * 12.0 + i)
-				e.draw_circle(Vector2(-22 - i * 6.0, -22 - sin(t * 8.0 + i) * 3.0), (5.0 - i) * f3, Color(3.0, 1.2 + i * 0.2, 0.3), true, -1.0, true)
+				Ink.dot(e, Vector2(-22 - i * 6.0, -22 - sin(t * 8.0 + i) * 3.0), (5.0 - i) * f3, Color(3.0, 1.2 + i * 0.2, 0.3))
 		"cobwebs":
 			for i in 3:
 				e.draw_line(h + Vector2(-8, -8), h + Vector2(-2 + i * 6.0, 8), Color(0.85, 0.85, 0.85, 0.5), 1.0, true)

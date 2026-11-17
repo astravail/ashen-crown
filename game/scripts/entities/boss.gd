@@ -194,28 +194,46 @@ func die(_src: Actor) -> void:
 
 
 func _draw() -> void:
-	draw_shadow(1.3)
+	draw_shadow(1.5)
 	var rise := 0.0
 	if intro_t > 0.0:
 		rise = intro_t / 2.6
 	draw_set_transform(Vector2(0, -rise * 10.0), 0.0, Vector2(facing.x, 1.0))
-	var cloak := shade(Color(0.12, 0.07, 0.06))
-	var armor := shade(Color(0.2, 0.17, 0.16))
+	var cloak := shade(Color(0.15, 0.06, 0.05))
+	var armor := shade(Color(0.25, 0.21, 0.2))
+	var dark := shade(Color(0.11, 0.09, 0.09))
 	var walk := sin(anim * 6.0) if charge_t > 0.0 or not sleeping else 0.0
-	draw_line(Vector2(-14, -40), Vector2(-14 + walk * 8.0, 0), shade(Color(0.1, 0.08, 0.08)), 12.0, true)
-	draw_line(Vector2(14, -40), Vector2(14 - walk * 8.0, 0), shade(Color(0.1, 0.08, 0.08)), 12.0, true)
-	var cape := PackedVector2Array([Vector2(-46, -6), Vector2(-20, -110), Vector2(20, -110), Vector2(40, -6), Vector2(10, -16), Vector2(-14, -2)])
-	draw_colored_polygon(cape, cloak)
-	var torso := PackedVector2Array([Vector2(-26, -40), Vector2(26, -40), Vector2(34, -110), Vector2(-34, -110)])
-	draw_colored_polygon(torso, armor)
-	draw_circle(Vector2(-34, -106), 16.0, armor, true, -1.0, true)
-	draw_circle(Vector2(34, -106), 16.0, armor, true, -1.0, true)
-	draw_rect(Rect2(-14, -146, 28, 38), shade(Color(0.16, 0.13, 0.12)))
-	# Sword arm
+	var wave := sin(anim * 2.2) * 3.0
+	# The royal cloak: burnt to rags, still dragging behind him
+	Ink.shape(self, PackedVector2Array([Vector2(-22, -110), Vector2(22, -110), Vector2(44, -40), Vector2(48 + wave, -4), Vector2(34, -14), Vector2(24 + wave, 2), Vector2(10, -12),
+		Vector2(-4 - wave, 4), Vector2(-18, -10), Vector2(-32 - wave, 2), Vector2(-40, -14), Vector2(-52 + wave, -6), Vector2(-46, -44)]), cloak.lightened(0.1), cloak.darkened(0.6), 2.6)
+	Ink.limb(self, Vector2(-14, -42), Vector2(-14 + walk * 8.0, 0), 15.0, 11.0, dark.lightened(0.12), dark.darkened(0.3), 2.2)
+	Ink.limb(self, Vector2(14, -42), Vector2(14 - walk * 8.0, 0), 15.0, 11.0, dark.lightened(0.12), dark.darkened(0.3), 2.2)
+	Ink.limb(self, Vector2(-34, -100), Vector2(-46, -60), 13.0, 11.0, armor, armor.darkened(0.45), 2.2)
+	var torso := PackedVector2Array([Vector2(-24, -40), Vector2(24, -40), Vector2(30, -66), Vector2(36, -108), Vector2(-36, -108), Vector2(-30, -66)])
+	Ink.shape(self, torso, armor.lightened(0.14), armor.darkened(0.55), 2.6)
+	# Plates of the cuirass, and what is left of a king's tabard
+	draw_line(Vector2(-31, -72), Vector2(31, -72), Color(0.04, 0.03, 0.03, 0.8), 1.8, true)
+	draw_line(Vector2(-27, -54), Vector2(27, -54), Color(0.04, 0.03, 0.03, 0.8), 1.8, true)
+	Ink.shape(self, PackedVector2Array([Vector2(-9, -44), Vector2(9, -44), Vector2(7, -22), Vector2(2, -28), Vector2(-3, -18), Vector2(-8, -26)]), cloak.lightened(0.25), cloak.darkened(0.3), 1.8)
+	draw_line(Vector2(-26, -42), Vector2(26, -42), shade(Color(0.4, 0.3, 0.14)), 4.0, true)
+	for sgn in [-1.0, 1.0]:
+		# Pauldrons, each crowned with a spike
+		Ink.oval(self, Vector2(sgn * 36.0, -106), 17.0, 14.0, armor.lightened(0.22), armor.darkened(0.4), 2.4)
+		Ink.shape(self, PackedVector2Array([Vector2(sgn * 30.0, -116), Vector2(sgn * 48.0, -138), Vector2(sgn * 44.0, -112)]), armor.lightened(0.1), dark, 1.8)
+	Ink.rim(self, torso, Vector2(-0.7, -0.7), Color(0.9, 0.5, 0.25, 0.4), 1.8)
+	# A helm with no face behind it
+	Ink.shape(self, PackedVector2Array([Vector2(-14, -108), Vector2(14, -108), Vector2(15, -134), Vector2(10, -146), Vector2(-10, -146), Vector2(-15, -134)]), dark.lightened(0.22), dark.darkened(0.2), 2.4)
+	draw_line(Vector2(0, -144), Vector2(0, -112), Color(0.03, 0.025, 0.025, 0.9), 1.8, true)
+	draw_line(Vector2(-11, -130), Vector2(13, -130), Color(0.02, 0.015, 0.015), 4.5, true)
 	var up := cast_anim > 0.0
 	var hand := Vector2(44, -70) if not up else Vector2(30, -150)
-	draw_line(Vector2(32, -100), hand, armor, 10.0, true)
-	draw_line(Vector2(-32, -100), Vector2(-44, -60), armor, 10.0, true)
+	Ink.limb(self, Vector2(34, -100), hand, 13.0, 11.0, armor.lightened(0.1), armor.darkened(0.4), 2.2)
+	Ink.oval(self, hand, 8.5, 8.0, dark.lightened(0.2), dark, 2.0)
+	# The blade itself is black iron: the fire on it is drawn by the glow layer
+	var tip := hand + (Vector2(40, 70) if not up else Vector2(10, -90))
+	var edge := (tip - hand).orthogonal().normalized() * 4.0
+	Ink.shape(self, PackedVector2Array([hand + edge, tip, hand - edge]), dark.lightened(0.1), dark.darkened(0.4), 1.8)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -230,8 +248,8 @@ func _draw_glow() -> void:
 	for i in 3:
 		var x := -12.0 + i * 12.0
 		var h := (18.0 + 10.0 * sin(anim * 7.0 + i)) * heat
-		glow.draw_colored_polygon(PackedVector2Array([Vector2(x - 6, -160), Vector2(x + 6, -160), Vector2(x + sin(anim * 5.0 + i) * 4.0, -160 - h)]), Color(3.0, 0.9, 0.2, 0.7 * flick))
-	glow.draw_circle(Vector2(0, -160), 40.0, Color(1.6, 0.45, 0.1, 0.18 * heat), true, -1.0, true)
+		Ink.flame(glow, Vector2(x, -158), 6.5, h, anim, float(i) * 2.1, Color(3.0, 1.1, 0.25, 0.8 * flick), Color(2.4, 0.5, 0.1, 0.6 * flick))
+	Ink.glow(glow, Vector2(0, -160), 70.0, Color(1.6, 0.45, 0.1, 0.4 * heat))
 	glow.draw_line(Vector2(-8, -130), Vector2(-2, -130), Color(4.0, 1.6, 0.4), 3.0)
 	glow.draw_line(Vector2(4, -130), Vector2(10, -130), Color(4.0, 1.6, 0.4), 3.0)
 	# Cracks in the armour
@@ -241,6 +259,10 @@ func _draw_glow() -> void:
 	var up := cast_anim > 0.0
 	var hand := Vector2(44, -70) if not up else Vector2(30, -150)
 	var tip := hand + (Vector2(40, 70) if not up else Vector2(10, -90))
-	glow.draw_line(hand, tip, Color(3.4, 1.2, 0.3), 6.0, true)
-	glow.draw_line(hand, tip, Color(1.6, 0.4, 0.1, 0.3), 16.0, true)
+	var edge := (tip - hand).orthogonal().normalized()
+	glow.draw_primitive(PackedVector2Array([hand + edge * 9.0, tip, hand - edge * 9.0]), PackedColorArray([Color(1.6, 0.4, 0.1, 0.25), Color(1.6, 0.4, 0.1, 0.0), Color(1.6, 0.4, 0.1, 0.25)]), PackedVector2Array())
+	glow.draw_primitive(PackedVector2Array([hand + edge * 3.0, tip, hand - edge * 3.0]), PackedColorArray([Color(3.4, 1.4, 0.4), Color(3.0, 0.8, 0.2, 0.7), Color(3.4, 1.4, 0.4)]), PackedVector2Array())
+	for i in 4:
+		var fp := hand.lerp(tip, 0.15 + i * 0.22)
+		Ink.flame(glow, fp, 5.0, 16.0, anim, float(i) * 1.7, Color(3.0, 1.0, 0.25, 0.7 * flick), Color(2.2, 0.5, 0.1, 0.5))
 	glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

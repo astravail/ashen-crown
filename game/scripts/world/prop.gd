@@ -2,6 +2,11 @@ class_name Prop
 extends Node2D
 ## Static scenery and interactive objects (shrines, altar, portal).
 
+const Ink := preload("res://scripts/fx/ink.gd")
+## Kinds whose picture moves: everything else is drawn once and left alone.
+const LIVE := ["reeds", "pine", "hanged", "banner", "chain"]
+const LIVE_GLOW := ["brazier", "candles", "bonfire", "altar", "portal", "crown", "door", "waypoint", "sigil", "shrine_fury", "shrine_warding", "shrine_haste"]
+
 var world: World
 var kind := "rock"
 var seed_value := 0
@@ -16,6 +21,11 @@ var scale_v := 1.0
 var branches: Array = []
 var chest_id := 0
 var door_idx := -1
+## Far from the view a prop holds no picture: World wakes it when the player comes near.
+var asleep := true
+var _live := false
+var _live_glow := false
+var _drawn_used := false
 
 
 func init() -> void:
@@ -25,6 +35,8 @@ func init() -> void:
 	glow.material = World.unshaded_add
 	add_child(glow)
 	glow.draw.connect(_draw_glow)
+	_live = kind in LIVE
+	_live_glow = kind in LIVE_GLOW
 	match kind:
 		"rock":
 			radius = 22.0 * scale_v
@@ -104,6 +116,8 @@ func init() -> void:
 				radius = 0.0
 				light = world.make_light(_shrine_color(), 1.1, 520.0)
 				add_child(light)
+	if light:
+		light.visible = false
 
 
 func _shrine_color() -> Color:
@@ -162,43 +176,106 @@ func update(dt: float) -> void:
 		world.glow_fx.emit(global_position + Vector2(cos(a), sin(a) * 0.5) * 70.0, -Vector2(cos(a), sin(a) * 0.5) * 60.0, 1.0, 3.0, Color(3.0, 1.0, 0.3), Particles.EMBER, 0.5)
 	if kind == "altar" and not used and rng.randf() < dt * 10.0:
 		world.glow_fx.emit(global_position + Vector2(rng.randf_range(-20, 20), -60), Vector2(rng.randf_range(-10, 10), -50), 1.4, 2.5, Color(3.0, 1.5, 0.5), Particles.EMBER, 0.4)
+	if _live or used != _drawn_used:
+		_drawn_used = used
+		queue_redraw()
+		glow.queue_redraw()
+	elif _live_glow:
+		glow.queue_redraw()
+
+
+func wake() -> void:
+	if not asleep:
+		return
+	asleep = false
+	if light:
+		light.visible = true
 	queue_redraw()
 	glow.queue_redraw()
 
 
+## Drops every draw command, and with them the GPU buffers they were holding.
+func sleep() -> void:
+	if asleep:
+		return
+	asleep = true
+	if light:
+		light.visible = false
+	RenderingServer.canvas_item_clear(get_canvas_item())
+	RenderingServer.canvas_item_clear(glow.get_canvas_item())
+
+
 func _draw() -> void:
+	if asleep:
+		return
 	match kind:
 		"rock", "rubble", "spike":
 			_draw_rock()
 		"dead_tree":
-			_shadow(26)
+			_shadow(30)
 			for b in branches:
-				draw_line(b[0], b[1], Color(0.07, 0.06, 0.055), b[2] + 2.0, true)
+				draw_line(b[0], b[1], Ink.LINE, b[2] + 3.0, true)
 			for b in branches:
-				draw_line(b[0], b[1], Color(0.16, 0.13, 0.11), b[2], true)
+				draw_line(b[0], b[1], Color(0.15, 0.12, 0.105), b[2], true)
+			# the weather side of every limb is bleached
+			for b in branches:
+				if b[2] > 2.5:
+					var off: Vector2 = (b[1] - b[0]).orthogonal().normalized() * b[2] * 0.22
+					if off.x > 0.0:
+						off = -off
+					draw_line(b[0] + off, b[1] + off, Color(0.34, 0.3, 0.26, 0.7), b[2] * 0.3, true)
 		"pillar":
-			_shadow(34)
-			var h := 120.0 * scale_v if rng.seed % 3 != 0 else 50.0
-			draw_rect(Rect2(-24, -h, 48, h), Color(0.2, 0.19, 0.2))
-			draw_rect(Rect2(-24, -h, 14, h), Color(0.28, 0.27, 0.28))
-			draw_rect(Rect2(-30, -10, 60, 14), Color(0.16, 0.15, 0.16))
-			draw_rect(Rect2(-30, -h - 8, 60, 12), Color(0.24, 0.23, 0.24))
+			_shadow(38)
+			var broken := rng.seed % 3 == 0
+			var h := 50.0 if broken else 120.0 * scale_v
+			var stone := Color(0.3, 0.285, 0.3)
+			Ink.shape(self, PackedVector2Array([Vector2(-31, -12), Vector2(31, -12), Vector2(33, 3), Vector2(-33, 3)]), stone.lightened(0.05), stone.darkened(0.5))
+			var shaft := PackedVector2Array([Vector2(-23, -h), Vector2(23, -h), Vector2(24, -11), Vector2(-24, -11)])
+			if broken:
+				# snapped off: a ragged crown where the rest of it fell away
+				shaft = PackedVector2Array([Vector2(-23, -h + 6), Vector2(-12, -h - 7), Vector2(-3, -h + 2), Vector2(8, -h - 10), Vector2(23, -h + 4), Vector2(24, -11), Vector2(-24, -11)])
+			Ink.shape(self, shaft, stone.lightened(0.12), stone.darkened(0.3))
+			draw_colored_polygon(PackedVector2Array([Vector2(-22, -h + 8), Vector2(-14, -h + 8), Vector2(-14, -12), Vector2(-23, -12)]), Color(1, 1, 1, 0.07))
+			draw_colored_polygon(PackedVector2Array([Vector2(9, -h + 8), Vector2(22, -h + 8), Vector2(23, -12), Vector2(9, -12)]), Color(0, 0, 0, 0.24))
 			for i in 3:
-				draw_line(Vector2(-12 + i * 12, -h + 6), Vector2(-12 + i * 12, -14), Color(0.12, 0.11, 0.12), 2.0)
+				draw_line(Vector2(-11 + i * 10, -h + 12), Vector2(-11 + i * 10, -16), Color(0.1, 0.09, 0.1, 0.8), 1.5, true)
+			if not broken:
+				Ink.shape(self, PackedVector2Array([Vector2(-31, -h - 11), Vector2(31, -h - 11), Vector2(25, -h + 2), Vector2(-25, -h + 2)]), stone.lightened(0.2), stone.darkened(0.15))
+			Ink.rim(self, shaft, Vector2(-0.8, -0.6), Color(0.62, 0.6, 0.62, 0.45))
 		"grave":
-			_shadow(18)
-			draw_rect(Rect2(-12, -34, 24, 34), Color(0.24, 0.23, 0.23))
-			draw_circle(Vector2(0, -34), 12, Color(0.24, 0.23, 0.23), true, -1.0, true)
-			draw_line(Vector2(0, -38), Vector2(0, -16), Color(0.12, 0.11, 0.11), 3.0)
-			draw_line(Vector2(-7, -30), Vector2(7, -30), Color(0.12, 0.11, 0.11), 3.0)
+			_shadow(20)
+			# a leaning headstone, every one settled at its own angle
+			draw_set_transform(Vector2.ZERO, (float(rng.seed % 9) - 4.0) * 0.035, Vector2.ONE)
+			var gs := Color(0.3, 0.29, 0.285)
+			var slab := PackedVector2Array([Vector2(-13, 1)])
+			for i in 7:
+				var ga := PI + PI * i / 6.0
+				slab.append(Vector2(cos(ga) * 13.0, -33.0 + sin(ga) * 12.0))
+			slab.append(Vector2(13, 1))
+			Ink.shape(self, slab, gs.lightened(0.14), gs.darkened(0.4))
+			draw_line(Vector2(0, -38), Vector2(0, -15), Color(0.09, 0.085, 0.085), 2.5, true)
+			draw_line(Vector2(-7, -30), Vector2(7, -30), Color(0.09, 0.085, 0.085), 2.5, true)
+			draw_line(Vector2(1, -38), Vector2(1, -15), Color(0.5, 0.48, 0.46, 0.35), 1.0, true)
+			if rng.seed % 4 == 1:
+				draw_polyline(PackedVector2Array([Vector2(-4, -45), Vector2(-7, -34), Vector2(-3, -27), Vector2(-9, -16)]), Color(0.07, 0.065, 0.065), 1.5, true)
+			Ink.rim(self, slab, Vector2(-0.7, -0.7), Color(0.6, 0.58, 0.55, 0.4))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			# earth heaped at its foot
+			Ink.oval(self, Vector2(0, 2), 17, 5, Color(0.13, 0.11, 0.09), Color(0.07, 0.06, 0.05), 0.0)
 		"brazier":
-			_shadow(22)
-			draw_line(Vector2(-14, 0), Vector2(-8, -30), Color(0.12, 0.1, 0.09), 4.0)
-			draw_line(Vector2(14, 0), Vector2(8, -30), Color(0.12, 0.1, 0.09), 4.0)
-			draw_line(Vector2(0, 2), Vector2(0, -30), Color(0.12, 0.1, 0.09), 4.0)
-			var bowl := PackedVector2Array([Vector2(-22, -40), Vector2(22, -40), Vector2(14, -28), Vector2(-14, -28)])
-			draw_colored_polygon(bowl, Color(0.2, 0.17, 0.15))
-			draw_line(Vector2(-22, -40), Vector2(22, -40), Color(0.35, 0.28, 0.22), 3.0)
+			_shadow(24)
+			var iron := Color(0.15, 0.13, 0.125)
+			Ink.limb(self, Vector2(0, -30), Vector2(0, 3), 4.5, 3.5, iron.darkened(0.2), iron.darkened(0.5), 1.5)
+			Ink.limb(self, Vector2(-8, -30), Vector2(-16, 1), 4.5, 3.5, iron, iron.darkened(0.4), 1.5)
+			Ink.limb(self, Vector2(8, -30), Vector2(16, 1), 4.5, 3.5, iron, iron.darkened(0.4), 1.5)
+			draw_line(Vector2(-13, -12), Vector2(13, -12), Ink.LINE, 3.5, true)
+			draw_line(Vector2(-13, -12), Vector2(13, -12), iron, 1.5, true)
+			# the bowl, its rim glowing from the coals inside
+			var bowl := PackedVector2Array([Vector2(-23, -41), Vector2(23, -41), Vector2(19, -33), Vector2(11, -27), Vector2(-11, -27), Vector2(-19, -33)])
+			Ink.shape(self, bowl, Color(0.3, 0.22, 0.17), Color(0.09, 0.075, 0.07))
+			Ink.oval(self, Vector2(0, -41), 23, 5.5, Color(0.2, 0.1, 0.06), Color(0.32, 0.12, 0.05), 1.5)
+			for i in 5:
+				draw_circle(Vector2(-13 + i * 6.5, -41 + sin(i * 2.3 + seed_value) * 1.5), 3.0, Color(0.5, 0.16, 0.05).lerp(Color(0.08, 0.06, 0.05), 0.5 * float((seed_value >> i) & 1)), true, -1.0, true)
 		"banner":
 			_shadow(10)
 			draw_line(Vector2(0, 0), Vector2(0, -110), Color(0.15, 0.12, 0.1), 4.0)
@@ -367,36 +444,70 @@ func _draw() -> void:
 func _draw_rock() -> void:
 	if shape.is_empty():
 		return
-	_shadow(radius + 10.0 if radius > 0.0 else 18.0)
-	var c := Color(0.17, 0.155, 0.15) if kind != "spike" else Color(0.07, 0.05, 0.06)
+	_shadow(radius + 12.0 if radius > 0.0 else 18.0)
 	if kind == "spike":
+		# a shard of volcanic glass: every face its own plane, the ones turned to the sky palest
+		var glass := Color(0.085, 0.065, 0.085)
 		var tip := Vector2(rng.seed % 20 - 10, -90.0 * scale_v)
+		var hull := shape.duplicate()
+		Ink.shape(self, hull, glass, glass.darkened(0.5), 2.5)
 		for i in shape.size():
 			var a := shape[i]
 			var b := shape[(i + 1) % shape.size()]
-			var lit := 0.06 + 0.12 * maxf(0.0, -(b - a).normalized().y)
-			draw_colored_polygon(PackedVector2Array([a, b, tip]), c + Color(lit, lit * 0.8, lit * 0.9))
+			if (a.y + b.y) * 0.5 < -radius * 0.2:
+				continue
+			var facing := clampf(-(b - a).normalized().x * 0.5 + 0.5, 0.0, 1.0)
+			var fc := glass.lerp(Color(0.34, 0.27, 0.38), facing * 0.55)
+			draw_polygon(PackedVector2Array([a, b, tip]), PackedColorArray([fc.darkened(0.45), fc.darkened(0.45), fc.lightened(0.12)]))
+			draw_line(a, tip, Color(0.03, 0.02, 0.03, 0.9), 1.2, true)
+		draw_line(shape[0], tip, Color(0.75, 0.62, 0.85, 0.5), 1.2, true)
 		return
-	draw_colored_polygon(shape, c)
+	var c := Color(0.215, 0.2, 0.19)
+	Ink.shape(self, shape, c.lightened(0.06), c.darkened(0.55), 2.5)
+	# the top of the boulder is a plane of its own, turned to the sky
 	var top := PackedVector2Array()
 	for p in shape:
-		top.append(p * 0.62 + Vector2(-3, -8))
-	draw_colored_polygon(top, c.lightened(0.18))
+		top.append(p * 0.6 + Vector2(-3, -9))
+	draw_polygon(top, PackedColorArray(_top_cols(top, c.lightened(0.3), c.lightened(0.1))))
+	var n := shape.size()
+	for i in n:
+		# an edge runs down from each corner of that plane to the ground
+		if (rng.seed >> i) & 1 == 1 or i == 0:
+			draw_line(top[i], shape[i], Color(0.05, 0.045, 0.045, 0.75), 1.3, true)
+	Ink.rim(self, top, Vector2(-0.6, -0.8), Color(0.66, 0.63, 0.6, 0.5), 1.4)
+	if kind == "rock" and rng.seed % 3 == 0:
+		# lichen
+		for i in 3:
+			var lp := top[(i * 2) % n] * 0.7 + Vector2(0, 2)
+			draw_circle(lp, 3.0 + i, Color(0.3, 0.34, 0.2, 0.45), true, -1.0, true)
+
+
+func _top_cols(pts: PackedVector2Array, a: Color, b: Color) -> PackedColorArray:
+	var out := PackedColorArray()
+	for p in pts:
+		out.append(a.lerp(b, clampf((p.x + 30.0) / 60.0, 0.0, 1.0)))
+	return out
 
 
 func _draw_pine() -> void:
-	_shadow(30 * scale_v)
+	_shadow(36 * scale_v)
 	var s := scale_v * 1.1
-	draw_rect(Rect2(-4 * s, -26 * s, 8 * s, 26 * s), Color(0.09, 0.07, 0.05))
-	var tiers := 4
-	for i in tiers:
-		var y := -22.0 * s - i * 30.0 * s
-		var w := (40.0 - i * 8.0) * s
-		var h := 46.0 * s
+	Ink.shape(self, PackedVector2Array([Vector2(-4.5 * s, -30 * s), Vector2(4.5 * s, -30 * s), Vector2(6.5 * s, 2), Vector2(-6.5 * s, 2)]), Color(0.13, 0.1, 0.08), Color(0.06, 0.045, 0.035))
+	var needle := Color(0.085, 0.135, 0.105)
+	for i in 4:
+		var y := -20.0 * s - i * 30.0 * s
+		var w := (43.0 - i * 8.5) * s
+		var h := 52.0 * s
 		var sway := sin(t * 0.7 + seed_value + i) * 1.5 * i
-		var dark := Color(0.05, 0.075, 0.06)
-		draw_colored_polygon(PackedVector2Array([Vector2(-w, y), Vector2(w, y), Vector2(sway, y - h)]), dark)
-		draw_colored_polygon(PackedVector2Array([Vector2(-w * 0.15, y), Vector2(w, y), Vector2(sway, y - h)]), dark.lightened(0.07))
+		var k := 1.0 + 0.12 * sin(float(seed_value % 17) + i * 2.1)
+		# each tier of boughs hangs in ragged points
+		var bough := PackedVector2Array([Vector2(sway, y - h), Vector2(w * 0.5 + sway * 0.5, y - h * 0.38), Vector2(w * k, y + 2.0 * s),
+			Vector2(w * 0.62, y - 7.0 * s), Vector2(w * 0.32, y + 5.0 * s), Vector2(w * 0.04, y - 6.0 * s), Vector2(-w * 0.3, y + 6.0 * s),
+			Vector2(-w * 0.6, y - 6.0 * s), Vector2(-w / k, y + 3.0 * s), Vector2(-w * 0.5 + sway * 0.5, y - h * 0.4)])
+		Ink.shape(self, bough, needle.lightened(0.05 + 0.03 * i), needle.darkened(0.6), 2.2)
+		# the north-west flank takes the light, and the ash that settles on everything here
+		draw_polygon(PackedVector2Array([bough[0], bough[9], bough[8], bough[7]]), PackedColorArray([Color(0.3, 0.38, 0.3, 0.5), Color(0.2, 0.28, 0.2, 0.3), Color(0.14, 0.2, 0.15, 0.0), Color(0.14, 0.2, 0.15, 0.0)]))
+		draw_line(bough[0], bough[0].lerp(bough[9], 0.75), Color(0.6, 0.6, 0.57, 0.3), 1.6, true)
 
 
 func _draw_hanged() -> void:
@@ -464,19 +575,20 @@ func _draw_bones(p: Vector2, s: float) -> void:
 
 
 func _shadow(r: float) -> void:
-	draw_set_transform(Vector2(6, 4), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, r, Color(0, 0, 0, 0.45), true, -1.0, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	Ink.shadow(self, Vector2(r * 0.3, r * 0.1), r * 1.35, r * 0.56, 0.62)
 
 
 func _draw_glow() -> void:
+	if asleep:
+		return
 	match kind:
 		"brazier":
-			for i in 3:
-				var fl := 1.0 + 0.2 * sin(t * (11.0 + i * 3.0) + i)
-				var pts := PackedVector2Array([Vector2(-16 + i * 4, -40), Vector2(16 - i * 4, -40), Vector2(sin(t * 6.0 + i) * 4.0, -40 - (26 - i * 6) * fl)])
-				var c: Color = [Color(2.6, 0.7, 0.15, 0.9), Color(3.2, 1.3, 0.3, 0.9), Color(4.0, 2.6, 1.2, 1.0)][i]
-				glow.draw_colored_polygon(pts, c)
+			var sv := float(seed_value % 100)
+			Ink.glow(glow, Vector2(0, -48), 46.0, Color(1.5, 0.5, 0.12, 0.3))
+			Ink.flame(glow, Vector2(-7, -40), 8.0, 24.0, t, sv, Color(2.4, 0.6, 0.12, 0.9), Color(2.0, 0.4, 0.08, 0.7))
+			Ink.flame(glow, Vector2(8, -40), 7.0, 20.0, t, sv + 2.0, Color(2.4, 0.6, 0.12, 0.9), Color(2.0, 0.4, 0.08, 0.7))
+			Ink.flame(glow, Vector2(0, -40), 11.0, 34.0, t, sv + 4.0, Color(3.2, 1.3, 0.3, 0.95), Color(2.6, 0.7, 0.14, 0.8))
+			Ink.flame(glow, Vector2(0, -40), 5.5, 19.0, t, sv + 6.0, Color(4.0, 3.0, 1.6, 1.0), Color(3.4, 1.6, 0.4, 0.9))
 		"altar":
 			if not used:
 				var y := -70.0 + sin(t * 2.0) * 6.0

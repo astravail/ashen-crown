@@ -20,6 +20,8 @@ const CELL := 64.0
 const ACTIVATE_DIST := 430.0
 const INTERACT_KINDS := ["chest", "chest_iron", "waypoint", "crown", "door"]
 const UPDATE_DIST := 2000.0
+const PostFX := preload("res://scripts/fx/post_fx.gd")
+const Ink := preload("res://scripts/fx/ink.gd")
 
 static var unshaded_add: CanvasItemMaterial
 static var unshaded: CanvasItemMaterial
@@ -78,6 +80,7 @@ var texts: FloatText
 var ground: ColorRect
 var veins: ColorRect
 var canvas_mod: CanvasModulate
+var post: PostFX
 
 var hitstop_t := 0.0
 var shake_amt := 0.0
@@ -124,6 +127,9 @@ func make_light(color: Color, energy: float, size_px: float) -> PointLight2D:
 	l.energy = energy
 	l.texture_scale = size_px / 256.0
 	l.shadow_enabled = false
+	# How far above the ground the flame sits. The terrain is lit in relief, so a low lamp rakes
+	# across it and throws every stone into shadow, while a high one lights it evenly.
+	l.height = clampf(size_px * 0.1, 36.0, 170.0)
 	return l
 
 
@@ -174,10 +180,15 @@ func _cell_pos(c: Vector2i) -> Vector2:
 	return (Vector2(c) + Vector2(0.5, 0.5)) * CELL
 
 
+## The old ambient was far too dark to read the ground by; lift it a little.
+static func _lift(c: Color) -> Color:
+	return Color(minf(c.r * 1.4, 1.0), minf(c.g * 1.35, 1.0), minf(c.b * 1.3, 1.0), c.a)
+
+
 func _build_layers() -> void:
 	var size_px := Vector2(map.w, map.h) * CELL
 	canvas_mod = CanvasModulate.new()
-	canvas_mod.color = map.regions[0].zd.modulate
+	canvas_mod.color = _lift(map.regions[0].zd.modulate)
 	_target_mod = canvas_mod.color
 	add_child(canvas_mod)
 
@@ -276,6 +287,10 @@ func _build_layers() -> void:
 	add_child(camera)
 	camera.make_current()
 	_build_ambient()
+	post = PostFX.new()
+	add_child(post)
+	post.setup(self)
+	post.apply_zone(map.regions[0].zd, true)
 
 	# Show the outline of the whole map from the start; explored ground fills in as you walk.
 	minimap_img = Image.create(map.w, map.h, false, Image.FORMAT_RGBA8)
@@ -305,8 +320,9 @@ func _build_ambient() -> void:
 	ash.initial_velocity_min = 12.0
 	ash.initial_velocity_max = 34.0
 	ash.gravity = Vector2(8, 6)
-	ash.scale_amount_min = 1.2
-	ash.scale_amount_max = 3.2
+	ash.texture = Ink.soft_tex()
+	ash.scale_amount_min = 0.07
+	ash.scale_amount_max = 0.17
 	ash.angular_velocity_min = -90
 	ash.angular_velocity_max = 90
 	ash.color = Color(0.8, 0.77, 0.74, 0.55)
@@ -329,8 +345,9 @@ func _build_ambient() -> void:
 	embers.initial_velocity_min = 10.0
 	embers.initial_velocity_max = 40.0
 	embers.gravity = Vector2(6, -10)
-	embers.scale_amount_min = 1.0
-	embers.scale_amount_max = 2.4
+	embers.texture = Ink.soft_tex()
+	embers.scale_amount_min = 0.07
+	embers.scale_amount_max = 0.16
 	var vc: Color = map.regions[0].zd.vein
 	embers.color = Color(vc.r, vc.g, vc.b, 1.0)
 	var ramp2 := Gradient.new()
@@ -848,6 +865,9 @@ func _process(delta: float) -> void:
 	if guide_node:
 		guide_node.queue_redraw()
 	_update_camera(delta)
+	if post:
+		post.hurt = move_toward(post.hurt, (1.0 - player.hp / (player.max_hp * 0.35)) if player and not player.dead and player.hp < player.max_hp * 0.35 else 0.0, delta * 1.5)
+		post.update(delta, camera)
 
 
 func _update_attract(dt: float) -> void:
@@ -858,8 +878,21 @@ func _update_attract(dt: float) -> void:
 	var i := int(f)
 	var target := _cell_pos(nodes[i]).lerp(_cell_pos(nodes[mini(i + 1, n - 1)]), smoothstep(0.0, 1.0, f - i))
 	camera.global_position = camera.global_position.lerp(target, dt * 0.6)
+	_tend_props(camera.global_position, dt)
+
+
+## Scenery near the view is drawn and animated; the rest holds no picture at all, so a world of
+## thousands of props costs only what is on screen.
+func _tend_props(center: Vector2, dt: float) -> void:
 	for p in props:
-		p.update(dt)
+		var d2 := p.global_position.distance_squared_to(center)
+		if d2 < 1500.0 * 1500.0:
+			p.wake()
+			p.update(dt)
+		elif d2 > 1750.0 * 1750.0:
+			p.sleep()
+		elif not p.asleep:
+			p.update(dt)
 
 
 func _update_game(dt: float) -> void:
@@ -907,9 +940,7 @@ func _update_game(dt: float) -> void:
 		l.update(dt)
 	for n in npcs:
 		n.update(dt)
-	for p in props:
-		if p.global_position.distance_squared_to(pp) < 1600.0 * 1600.0:
-			p.update(dt)
+	_tend_props(pp, dt)
 	_cleanup()
 	_update_interact()
 	_update_guide(dt)
@@ -1522,7 +1553,9 @@ func _enter_region(i: int) -> void:
 	champion = st.champion
 	boss = st.boss
 	state = st.state
-	_target_mod = zone.modulate
+	_target_mod = _lift(zone.modulate)
+	if post:
+		post.apply_zone(zone)
 	_set_objective()
 	if not interior and old != i:
 		banner.emit(zone.name, zone.line)
@@ -1813,6 +1846,8 @@ func view_rect() -> Rect2:
 func shake(amount: float) -> void:
 	if Game.settings.shake:
 		shake_amt = minf(24.0, maxf(shake_amt, amount))
+		if post and amount >= 6.0:
+			post.kick = maxf(post.kick, minf(1.0, amount / 20.0))
 
 
 func hitstop(t: float) -> void:
@@ -1996,7 +2031,8 @@ func _draw_guide() -> void:
 				var q := pos + dir * d
 				var total := dist_acc + d
 				var a := clampf(1.0 - total / 1500.0, 0.0, 1.0) * 0.8
-				guide_node.draw_circle(q, 4.0, Color(col.r, col.g, col.b, a), true, -1.0, true)
+				Ink.glow(guide_node, q, 6.0, Color(col.r, col.g, col.b, a * 0.4))
+				guide_node.draw_circle(q, 1.3, Color(col.r, col.g, col.b, a * 0.8), true, -1.0, true)
 			d += 80.0
 		dist_acc += len
 		pos = p

@@ -725,14 +725,33 @@ class Logo extends Control:
 	func _draw() -> void:
 		var f := Game.font_display_bold
 		var c := Vector2(150, 92)
-		draw_circle(c, 130, Color(0.8, 0.08, 0.04, 0.10 + 0.03 * sin(t * 1.5)), true, -1.0, true)
-		draw_circle(c, 80, Color(1.0, 0.3, 0.08, 0.08 + 0.03 * sin(t * 2.1)), true, -1.0, true)
-		Icons.crown(self, c, 170.0, Color(0.88, 0.7, 0.36), Color(1.8, 0.35, 0.12))
-		for i in 6:
-			var ph := fmod(t * 0.35 + i * 0.37, 1.0)
-			var x := c.x - 70 + i * 28 + sin(t + i) * 6.0
-			var y := c.y + 50 + ph * 90.0
-			draw_circle(Vector2(x, y), 2.4 * (1.0 - ph), Color(1.4, 0.6, 0.2, 1.0 - ph), true, -1.0, true)
+		# The crown, still hot: a glow that breathes behind it, sparks lifting off its points
+		var ink := preload("res://scripts/fx/ink.gd")
+		ink.glow(self, c, 230.0, Color(0.8, 0.1, 0.04, 0.3 + 0.06 * sin(t * 1.5)))
+		ink.glow(self, c + Vector2(0, 10), 130.0, Color(1.0, 0.32, 0.08, 0.3 + 0.08 * sin(t * 2.1)))
+		var s := 170.0
+		var pts := PackedVector2Array([c + Vector2(-0.5, 0.3) * s, c + Vector2(-0.56, -0.28) * s, c + Vector2(-0.26, 0.0) * s, c + Vector2(0, -0.46) * s, c + Vector2(0.26, 0.0) * s, c + Vector2(0.56, -0.28) * s, c + Vector2(0.5, 0.3) * s])
+		ink.shape(self, pts, Color(0.2, 0.15, 0.1), Color(0.05, 0.035, 0.03), 0.0)
+		ink.outline(self, pts, Color(0.02, 0.012, 0.01, 0.9), 11.0)
+		ink.outline(self, pts, Color(0.93, 0.74, 0.38), 5.0)
+		ink.outline(self, pts, Color(1.0, 0.95, 0.72, 0.5), 1.5)
+		draw_rect(Rect2(c + Vector2(-0.5, 0.32) * s - Vector2(3, 3), Vector2(1.0, 0.1) * s + Vector2(6, 6)), Color(0.02, 0.012, 0.01, 0.9))
+		draw_rect(Rect2(c + Vector2(-0.5, 0.32) * s, Vector2(1.0, 0.1) * s), Color(0.93, 0.74, 0.38))
+		draw_rect(Rect2(c + Vector2(-0.5, 0.32) * s, Vector2(1.0, 0.03) * s), Color(1.0, 0.93, 0.68))
+		for g in 3:
+			ink.dot(self, c + Vector2(-0.28 + g * 0.28, 0.37) * s, 5.0, Color(0.5, 0.05, 0.04))
+			ink.dot(self, c + Vector2(-0.28 + g * 0.28, 0.37) * s + Vector2(-1.2, -1.2), 1.6, Color(1.0, 0.5, 0.4, 0.8))
+		var crack := PackedVector2Array([c + Vector2(0, -0.46) * s, c + Vector2(-0.07, -0.1) * s, c + Vector2(0.06, 0.06) * s, c + Vector2(-0.03, 0.32) * s])
+		var beat := 0.75 + 0.25 * sin(t * 2.6)
+		for k in 3:
+			draw_line(crack[k], crack[k + 1], Color(1.0, 0.3, 0.08, 0.35 * beat), 9.0, true)
+		for k in 3:
+			draw_line(crack[k], crack[k + 1], Color(1.0, 0.72 * beat + 0.2, 0.3 * beat), 3.0, true)
+		for i in 9:
+			var ph := fmod(t * 0.3 + i * 0.37, 1.0)
+			var q := Vector2(c.x - 84 + i * 21 + sin(t * 1.3 + i * 2.0) * 9.0, c.y - 50 - ph * 120.0)
+			ink.glow(self, q, 9.0 * (1.0 - ph), Color(1.0, 0.45, 0.12, 0.4 * (1.0 - ph)))
+			ink.dot(self, q, 2.2 * (1.0 - ph), Color(1.0, 0.75, 0.35, 1.0 - ph))
 		var title := "ASHEN CROWN"
 		var fs := 96
 		var pos := Vector2(0, 268)

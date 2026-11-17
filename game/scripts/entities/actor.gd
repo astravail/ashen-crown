@@ -2,6 +2,8 @@ class_name Actor
 extends Node2D
 ## Anything with life: the player, minions and enemies.
 
+const Ink := preload("res://scripts/fx/ink.gd")
+
 enum Team { PLAYER, ENEMY }
 
 var world: World
@@ -144,10 +146,7 @@ func shade(c: Color) -> Color:
 
 
 func draw_shadow(scale_x := 1.0) -> void:
-	draw_set_transform(Vector2(0, radius * 0.15), 0.0, Vector2(1.0, 0.42))
-	draw_circle(Vector2.ZERO, radius * 1.25 * scale_x, Color(0, 0, 0, 0.42), true, -1.0, true)
-	draw_circle(Vector2.ZERO, radius * 0.9 * scale_x, Color(0, 0, 0, 0.3), true, -1.0, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	Ink.shadow(self, Vector2(radius * 0.25, radius * 0.12), radius * 1.75 * scale_x, radius * 0.72 * scale_x, 0.7)
 
 
 func draw_status_marks() -> void:

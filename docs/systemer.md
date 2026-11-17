@@ -70,3 +70,15 @@ Femte klasse, låst til man har fullført historien én gang (`Game.class_unlock
 ## Tema (0.4.0)
 
 Diablo-inspirert: blodrød og gammelt gull på sverted stein. Rammer lages prosedyrisk i `scripts/ui/ornate.gd` og brukes av temaet, kortene og HUD.
+
+## Grafikk (0.5.0)
+
+Alt tegnes fortsatt i kode, uten bildefiler. Utseendet bæres av tre ting:
+
+- **Terreng** (`shaders/ground.gdshader`, `shaders/terrain.gdshaderinc`, glød i `shaders/veins.gdshader`). Hvert underlag er et høydefelt i tillegg til en farge, så lysene i scenen tegner frem hver stein og rot. Mønstrene velges med `pattern` i sonedataene: 0 tråkket jord med kjerrespor, 1 heller, 2 myr, 3 vulkanske plater, 4 skogbunn, 5 katakombefliser. Bakke man ikke kan gå på er hevet: veggen viser en front mot sør, kaster skygge og forsvinner i mørket bakover.
+- **Tegnestil** (`scripts/fx/ink.gd`). Figurer og props er former med blekkontur, lyse øverst og mørke ved foten, med en tynn lyskant mot fakkelen og en myk skygge under. Ting som lyser er myke: en glorie med en liten varm kjerne. Nye ting tegnes med `Ink.shape`, `Ink.limb`, `Ink.oval`, `Ink.dot`, `Ink.glow` og `Ink.flame`.
+- **Etterbehandling** (`scripts/fx/post_fx.gd`, `shaders/post.gdshader`). Fargegradering, tåke, vignett og filmkorn legges over verden, aldri over HUD og menyer. Utseendet per underlag står i `PostFX.LOOKS`.
+
+Ytelse: `draw_polygon`, `draw_circle`, `draw_polyline` og `draw_arc` får grafikkortet til å opprette egne buffere for hvert kall, og svake drivere tåler bare noen tusen. Derfor er konturer multilinjer, lemmer og flammer primitiver, og prikker og glød teksturerte rektangler. Props langt fra bildet sover uten tegnekommandoer (`World._tend_props`), og en prop som ikke beveger seg tegnes én gang (`Prop.LIVE`, `Prop.LIVE_GLOW`).
+
+Stillbilder i fast størrelse, uansett vindu: `godot --path game res://scripts/debug/shots.tscn -- --out=/tmp/shots --views=title,village,zone0,fight1,gallery,props,loot,cuts,boss,interior [--quality=0..3] [--class=knight|gravecaller|pyrewitch] [--bench]`. Kjør det med `XDG_DATA_HOME` satt til en midlertidig mappe, så rører det ikke egne lagringer.

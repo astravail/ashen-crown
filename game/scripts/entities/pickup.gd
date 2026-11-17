@@ -2,6 +2,8 @@ class_name Pickup
 extends Node2D
 ## Health globes.
 
+const Ink := preload("res://scripts/fx/ink.gd")
+
 var world: World
 var kind := "globe"
 var done := false
@@ -35,14 +37,28 @@ func update(dt: float) -> void:
 	glow.queue_redraw()
 
 
+## Where the globe hangs: it bobs gently above the ground.
+func _orb_y() -> float:
+	return -14.0 + sin(t * 3.0) * 3.0
+
+
 func _draw() -> void:
-	draw_set_transform(Vector2(0, 4), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, 11, Color(0, 0, 0, 0.4), true, -1.0, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var y := _orb_y()
+	# the shadow tightens as the globe dips toward the ground
+	var low := 0.5 + 0.5 * sin(t * 3.0)
+	Ink.shadow(self, Vector2(1, 4), 11.0 + low * 2.5, 4.5 + low, 0.4 + 0.15 * low)
+	# a dark setting behind the glass, so the red holds against bright ground
+	Ink.dot(self, Vector2(0, y), 10.6, Color(0.05, 0.0, 0.01, 0.9))
 
 
 func _draw_glow() -> void:
-	var y := -14.0 + sin(t * 3.0) * 3.0
-	glow.draw_circle(Vector2(0, y), 18, Color(1.2, 0.1, 0.08, 0.18), true, -1.0, true)
-	glow.draw_circle(Vector2(0, y), 9, Color(2.4, 0.25, 0.18), true, -1.0, true)
-	glow.draw_circle(Vector2(-2.5, y - 3), 3, Color(3.0, 1.6, 1.4), true, -1.0, true)
+	var y := _orb_y()
+	var c := Vector2(0, y)
+	Ink.glow(glow, c, 30.0, Color(1.5, 0.12, 0.08, 0.26 + 0.06 * sin(t * 3.0)))
+	# glass: deep red at the rim, lit from within, light pooling low on the far side
+	Ink.dot(glow, c, 9.2, Color(1.0, 0.04, 0.05))
+	Ink.glow(glow, c + Vector2(0.8, 1.4), 10.5, Color(3.2, 0.45, 0.28, 0.95))
+	Ink.glow(glow, c + Vector2(3.0, 4.2), 4.6, Color(4.0, 1.5, 0.9, 0.7))
+	# the bright window of a highlight, and a smaller one beside it
+	Ink.dot(glow, c + Vector2(-3.3, -3.6), 2.2, Color(4.0, 3.6, 3.4, 0.95))
+	Ink.dot(glow, c + Vector2(-0.3, -6.0), 0.9, Color(4.0, 3.6, 3.4, 0.8))

@@ -1,6 +1,7 @@
 shader_type canvas_item;
 render_mode blend_add, unshaded;
-// Emissive ember veins in the ground cracks, and the glow of the abyss beyond the walls.
+// What glows in the ground: embers in the seams between stones, the melt between plates of crust,
+// spores on the marsh water, fungus among the roots.
 
 uniform sampler2D mask : filter_linear, repeat_disable;
 uniform vec4 vein : source_color = vec4(1.0, 0.4, 0.1, 1.0);
@@ -11,7 +12,7 @@ uniform vec2 map_px = vec2(9600.0);
 
 varying vec2 wpos;
 
-#include "res://shaders/noise.gdshaderinc"
+#include "res://shaders/terrain.gdshaderinc"
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
@@ -19,31 +20,43 @@ void vertex() {
 
 void fragment() {
 	vec2 p = wpos;
-	float m = texture(mask, p / map_px).r;
-	float edge = m + (fbm(p * 0.018) - 0.5) * 0.42;
-	float floor_amt = smoothstep(0.44, 0.56, edge);
-	vec2 vor = voronoi(p * 0.012);
-	float line = 1.0 - smoothstep(0.0, 0.016, vor.y);
-	float soft = 1.0 - smoothstep(0.0, 0.07, vor.y);
-	float zone_mask = smoothstep(0.6, 0.78, fbm(p * 0.0022 + 4.0));
-	float pulse = 0.7 + 0.3 * sin(TIME * 1.1 + fbm(p * 0.01) * 12.0);
-	float v = (line * 0.55 + soft * 0.12) * zone_mask * pulse * floor_amt;
-	if (pattern > 0.5 && pattern < 1.5) {
-		v *= step(0.75, hash(floor(p / vec2(112.0, 80.0))));
+	float fl = smoothstep(0.52, 0.6, edge_val(p));
+	float mid = fbm3(p * 0.011 + 5.0);
+	float region = smoothstep(0.56, 0.74, fbm3(p * 0.0022 + 4.0));
+	float pulse = 0.7 + 0.3 * sin(TIME * 1.1 + vnoise(p * 0.01) * 12.0);
+	float v = 0.0;
+	if (pattern < 0.5) {
+		// embers still alive under the ash, breathing
+		vec3 em = vor(p * 0.035 + 4.0);
+		float ash = smoothstep(0.52, 0.74, fbm3(p * 0.006 + 40.0));
+		v = step(0.7, em.z) * smoothstep(0.22, 0.02, em.x) * ash * region * 1.6;
+	} else if (pattern < 1.5) {
+		vec2 fc = flag_cell(p);
+		float lit = smoothstep(0.56, 0.74, fbm3(p * 0.017 + 60.0));
+		v = ((1.0 - smoothstep(0.0, 1.6, fc.x)) * 0.6 + (1.0 - smoothstep(0.0, 9.0, fc.x)) * 0.1) * lit * region;
+	} else if (pattern < 2.5) {
+		float water = smoothstep(0.53, 0.57, fbm(p * 0.004 + 11.0));
+		vec3 sp = vor(p * 0.05 + 2.0);
+		float tw = 0.5 + 0.5 * sin(TIME * (1.0 + sp.z * 2.0) + sp.z * 40.0);
+		v = step(0.86, sp.z) * smoothstep(0.16, 0.02, sp.x) * tw * water * 1.4;
+		pulse = 1.0;
+	} else if (pattern < 3.5) {
+		vec3 pl = vor(p * 0.021 + mid * 0.6);
+		float gap = pl.y - pl.x;
+		v = ((1.0 - smoothstep(0.0, 0.03, gap)) * 0.5 + (1.0 - smoothstep(0.0, 0.14, gap)) * 0.1) * region;
+		float lv = fbm(p * 0.0035 + 31.0);
+		float lava = smoothstep(0.64, 0.69, lv);
+		float crust = smoothstep(0.42, 0.6, fbm3(p * 0.03 + vec2(TIME * 0.05, TIME * 0.03)));
+		v = mix(v, (1.0 - crust) * 0.9 + 0.08, lava);
+		v += smoothstep(0.6, 0.64, lv) * (1.0 - smoothstep(0.64, 0.68, lv)) * 0.3;
+	} else if (pattern < 4.5) {
+		float near_root = (1.0 - smoothstep(0.0, 0.07, abs(fbm3(p * 0.0052 + 5.0) - 0.5))) * smoothstep(0.46, 0.6, fbm3(p * 0.0028 + 12.0));
+		vec3 sp = vor(p * 0.07 + 8.0);
+		v = step(0.8, sp.z) * smoothstep(0.2, 0.04, sp.x) * near_root * 1.6;
+	} else {
+		vec3 dc = diamond_cell(p);
+		float lit = smoothstep(0.56, 0.74, fbm3(p * 0.017 + 60.0));
+		v = ((1.0 - smoothstep(0.0, 1.5, dc.x)) * 0.6 + (1.0 - smoothstep(0.0, 8.0, dc.x)) * 0.1) * lit * region;
 	}
-	if (pattern > 4.5) {
-		v *= step(0.8, hash(floor(p / vec2(64.0, 64.0))));
-	}
-	if (pattern > 2.5 && pattern < 3.5) {
-		// Molten lava rivers, slowly churning
-		float l = fbm(p * 0.0035 + 31.0);
-		float lava = smoothstep(0.64, 0.72, l) * floor_amt;
-		float churn = 0.6 + 0.4 * fbm(p * 0.02 + vec2(TIME * 0.15, -TIME * 0.1));
-		v += lava * churn * 0.35 + smoothstep(0.6, 0.64, l) * (1.0 - smoothstep(0.64, 0.68, l)) * 0.25 * floor_amt;
-	}
-	// Abyss glow: embers smouldering far below the edges
-	float abyss = (1.0 - floor_amt) * smoothstep(0.3, 0.46, edge) * 0.045;
-	abyss += (1.0 - floor_amt) * smoothstep(0.7, 0.95, fbm(p * 0.004 + TIME * 0.02)) * 0.03;
-	float total = (v * 0.5 + abyss) * amount;
-	COLOR = vec4(vein.rgb * vein_hdr * total, 1.0);
+	COLOR = vec4(vein.rgb * vein_hdr * v * pulse * fl * amount * 0.5, 1.0);
 }

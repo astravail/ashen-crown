@@ -4,6 +4,8 @@ extends Control
 
 signal finished
 
+const Ink := preload("res://scripts/fx/ink.gd")
+
 const SCENES := {
 	"intro": {"title": "The Fall of Valdremor", "lines": [
 		["narrator", "Valdremor did not fall to an army."],
@@ -90,11 +92,13 @@ func _process(dt: float) -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.015, 0.015, fade))
 	_backdrop()
+	_finish()
 	var cx := size.x * 0.5
 	var bar := size.y * 0.12
 	draw_rect(Rect2(0, 0, size.x, bar), Color(0, 0, 0, fade))
 	draw_rect(Rect2(0, size.y - bar, size.x, bar), Color(0, 0, 0, fade))
 	var tw := Game.font_display_bold.get_string_size(title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 54).x
+	draw_string_outline(Game.font_display_bold, Vector2(cx - tw * 0.5, size.y * 0.36), title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 54, 10, Color(0, 0, 0, 0.55 * fade))
 	draw_string(Game.font_display_bold, Vector2(cx - tw * 0.5, size.y * 0.36), title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 54, Color(0.95, 0.86, 0.74, fade))
 	draw_line(Vector2(cx - tw * 0.4, size.y * 0.36 + 22), Vector2(cx + tw * 0.4, size.y * 0.36 + 22), Color(0.8, 0.45, 0.2, fade * 0.8), 1.0)
 	if idx >= 0 and idx < lines.size():
@@ -102,6 +106,7 @@ func _draw() -> void:
 		var shown := int(clampf(t / 0.035, 0.0, float(txt.length())))
 		var f := Game.font_italic
 		var w := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x
+		draw_string_outline(f, Vector2(cx - w * 0.5, size.y * 0.55), txt.substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 32, 8, Color(0, 0, 0, 0.6 * fade))
 		draw_string(f, Vector2(cx - w * 0.5, size.y * 0.55), txt.substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 32, Color(0.9, 0.85, 0.78, fade))
 	_hint()
 
@@ -119,85 +124,134 @@ func _hint() -> void:
 func _sky(top: Color, bottom: Color) -> void:
 	var pts := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
 	var cols := PackedColorArray([_fa(top), _fa(top), _fa(bottom), _fa(bottom)])
-	draw_polygon(pts, cols)
+	draw_primitive(pts, cols, PackedVector2Array())
+	# Whatever burns beyond the horizon lights the air above it
+	var hy := size.y * 0.72
+	draw_texture_rect(Ink.soft_tex(), Rect2(-size.x * 0.25, hy - size.y * 0.42, size.x * 1.5, size.y * 0.84), false, _fa(Color(bottom.r * 1.7, bottom.g * 1.5, bottom.b * 1.4, 0.55)))
 
 
 func _fa(c: Color) -> Color:
 	return Color(c.r, c.g, c.b, c.a * fade)
 
 
+## A line of hills or rubble. Its crest is caught by the haze, its foot is lost in the dark.
 func _ridge(base_y: float, amp: float, freq: float, seed_v: float, col: Color, speed: float) -> void:
 	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var crest := _fa(Color(col.r * 1.5 + 0.012, col.g * 1.5 + 0.01, col.b * 1.5 + 0.01, col.a))
+	var foot := _fa(Color(col.r * 0.55, col.g * 0.55, col.b * 0.55, col.a))
 	var x := -20.0
 	while x <= size.x + 20.0:
 		var u := x * freq + seed_v + clock * speed
 		var y := base_y - amp * (0.5 + 0.5 * sin(u) + 0.35 * sin(u * 2.3 + seed_v * 1.7) + 0.15 * sin(u * 5.1))
 		pts.append(Vector2(x, y))
+		cols.append(crest)
 		x += 18.0
 	pts.append(Vector2(size.x + 20.0, size.y))
+	cols.append(foot)
 	pts.append(Vector2(-20.0, size.y))
-	draw_colored_polygon(pts, _fa(col))
+	cols.append(foot)
+	draw_polygon(pts, cols)
 
 
 func _flame(p: Vector2, w: float, h: float, k: float) -> void:
-	var f := 1.0 + 0.35 * sin(clock * 9.0 + p.x * 0.07) + 0.2 * sin(clock * 17.0 + p.x)
-	var tip := Vector2(p.x + sin(clock * 5.0 + p.x) * w * 0.3, p.y - h * f * k)
-	draw_colored_polygon(PackedVector2Array([p + Vector2(-w, 0), p + Vector2(w, 0), tip]), _fa(Color(2.4, 0.6, 0.12, 0.9)))
-	draw_colored_polygon(PackedVector2Array([p + Vector2(-w * 0.55, 0), p + Vector2(w * 0.55, 0), p + Vector2(tip.x - p.x, -h * f * k * 0.65) + Vector2(0, 0)]), _fa(Color(3.2, 1.6, 0.4, 0.95)))
+	if k <= 0.01:
+		return
+	Ink.glow(self, p + Vector2(0, -h * 0.4 * k), w * 3.4, _fa(Color(1.6, 0.45, 0.1, 0.3 * k)))
+	Ink.flame(self, p, w, h * k, clock, p.x * 0.07, _fa(Color(2.4, 0.6, 0.12, 0.9)), _fa(Color(2.0, 0.4, 0.08, 0.75)))
+	Ink.flame(self, p, w * 0.55, h * k * 0.62, clock, p.x * 0.07 + 2.0, _fa(Color(3.4, 1.8, 0.5, 0.95)), _fa(Color(3.0, 1.0, 0.25, 0.85)))
 
 
 func _ash(n: int, speed: float, col := Color(0.8, 0.77, 0.74, 0.55)) -> void:
 	for i in n:
 		var ph := fmod(clock * speed * (0.5 + (i % 5) * 0.12) + i * 0.173, 1.0)
 		var x := fmod(i * 197.3, size.x) + sin(clock * 0.8 + i) * 24.0
-		draw_circle(Vector2(x, ph * size.y), 1.3 + (i % 3), _fa(Color(col.r, col.g, col.b, col.a * sin(ph * PI))), true, -1.0, true)
+		Ink.dot(self, Vector2(x, ph * size.y), 1.3 + (i % 3), _fa(Color(col.r, col.g, col.b, col.a * sin(ph * PI))))
 
 
 func _embers(n: int, col := Color(2.6, 1.0, 0.3, 0.8)) -> void:
 	for i in n:
 		var ph := fmod(clock * 0.14 + i * 0.137, 1.0)
 		var x := fmod(i * 211.7, size.x) + sin(ph * 6.0 + i) * 30.0
-		draw_circle(Vector2(x, size.y - ph * size.y), 1.5 + (i % 3), _fa(Color(col.r, col.g, col.b, (1.0 - ph) * col.a)), true, -1.0, true)
+		var q := Vector2(x, size.y - ph * size.y)
+		var r := 1.5 + (i % 3)
+		Ink.glow(self, q, r * 4.0, _fa(Color(col.r, col.g, col.b, (1.0 - ph) * col.a * 0.3)))
+		Ink.dot(self, q, r, _fa(Color(col.r, col.g, col.b, (1.0 - ph) * col.a)))
 
 
 func _building(x: float, base: float, w: float, h: float, col: Color, tower := false, broken := false) -> void:
 	draw_rect(Rect2(x, base - h, w, h), _fa(col))
+	# the side toward the fire is a shade paler
+	draw_rect(Rect2(x, base - h, 4, h), _fa(Color(col.r * 1.7 + 0.02, col.g * 1.5 + 0.012, col.b * 1.4 + 0.01, col.a)))
 	if tower:
-		draw_colored_polygon(PackedVector2Array([Vector2(x - 6, base - h), Vector2(x + w + 6, base - h), Vector2(x + w * 0.5, base - h - w * 1.1)]), _fa(col))
+		draw_primitive(PackedVector2Array([Vector2(x - 6, base - h), Vector2(x + w + 6, base - h), Vector2(x + w * 0.5, base - h - w * 1.1)]), PackedColorArray([_fa(col), _fa(col), _fa(col)]), PackedVector2Array())
+		draw_line(Vector2(x + w * 0.5, base - h - w * 1.1), Vector2(x + w * 0.5, base - h - w * 1.1 - 16.0), _fa(col), 2.0)
 	elif broken:
-		draw_colored_polygon(PackedVector2Array([Vector2(x, base - h), Vector2(x + w * 0.3, base - h - 18), Vector2(x + w * 0.55, base - h + 6), Vector2(x + w * 0.8, base - h - 12), Vector2(x + w, base - h)]), _fa(col))
+		draw_colored_polygon(PackedVector2Array([Vector2(x, base - h + 1), Vector2(x + w * 0.3, base - h - 18), Vector2(x + w * 0.55, base - h - 4), Vector2(x + w * 0.8, base - h - 12), Vector2(x + w, base - h + 1)]), _fa(col))
+	else:
+		for i in int(w / 16.0):
+			draw_rect(Rect2(x + i * 16.0, base - h - 9, 9, 9), _fa(col))
 	for i in 3:
 		var wy := base - h + 18.0 + i * 26.0
 		if wy < base - 20.0:
 			var lit := 0.5 + 0.5 * sin(clock * 2.0 + x * 0.3 + i)
+			Ink.glow(self, Vector2(x + w * 0.3 + 3.5, wy + 5.5), 20.0, _fa(Color(1.8, 0.6, 0.15, 0.3 * lit)))
 			draw_rect(Rect2(x + w * 0.3, wy, 7, 11), _fa(Color(2.2 * lit + 0.2, 0.8 * lit, 0.2, 0.9)))
 
 
 func _crown(c: Vector2, s: float, glow: float, cracked := false) -> void:
 	var pts := PackedVector2Array([c + Vector2(-1.0, 0.55) * s, c + Vector2(-1.1, -0.5) * s, c + Vector2(-0.5, -0.1) * s, c + Vector2(-0.3, -0.85) * s, c + Vector2(0, -0.2) * s, c + Vector2(0.3, -0.85) * s, c + Vector2(0.5, -0.1) * s, c + Vector2(1.1, -0.5) * s, c + Vector2(1.0, 0.55) * s])
-	draw_circle(c, s * 1.6, _fa(Color(1.6, 0.5, 0.1, 0.12 * glow)), true, -1.0, true)
-	draw_circle(c, s * 1.0, _fa(Color(2.0, 0.7, 0.15, 0.12 * glow)), true, -1.0, true)
-	draw_colored_polygon(pts, _fa(Color(0.6 + 1.6 * glow, 0.25 + 0.7 * glow, 0.06 + 0.15 * glow)))
-	draw_polyline(pts + PackedVector2Array([pts[0]]), _fa(Color(3.0, 1.8, 0.7)), 3.0, true)
+	Ink.glow(self, c, s * 3.2, _fa(Color(1.6, 0.5, 0.1, 0.22 * glow)))
+	Ink.glow(self, c, s * 1.8, _fa(Color(2.0, 0.8, 0.2, 0.2 * glow)))
+	# Hot at the points, cooling toward the band
+	Ink.shape(self, pts, _fa(Color(0.9 + 2.0 * glow, 0.45 + 1.0 * glow, 0.1 + 0.3 * glow)), _fa(Color(0.35 + 0.8 * glow, 0.1 + 0.25 * glow, 0.03 + 0.05 * glow)), maxf(2.0, s * 0.03), Color(3.0, 1.8, 0.7))
+	draw_line(c + Vector2(-0.98, 0.34) * s, c + Vector2(0.98, 0.34) * s, _fa(Color(3.0, 1.8, 0.7, 0.7)), maxf(1.5, s * 0.02), true)
 	if cracked:
-		draw_polyline(PackedVector2Array([c + Vector2(0.1, -0.2) * s, c + Vector2(-0.15, 0.1) * s, c + Vector2(0.1, 0.3) * s, c + Vector2(-0.1, 0.55) * s]), _fa(Color(4.0, 2.4, 0.8)), 3.0, true)
+		var cr := PackedVector2Array([c + Vector2(0.1, -0.2) * s, c + Vector2(-0.15, 0.1) * s, c + Vector2(0.1, 0.3) * s, c + Vector2(-0.1, 0.55) * s])
+		for i in 3:
+			draw_line(cr[i], cr[i + 1], _fa(Color(4.0, 2.4, 0.8)), maxf(2.0, s * 0.03), true)
+		Ink.glow(self, c + Vector2(0, 0.15) * s, s * 0.7, _fa(Color(3.0, 1.4, 0.4, 0.35 * glow)))
 
 
+## A cloaked figure seen against the light.
 func _figure(p: Vector2, h: float, col: Color, crown := false) -> void:
-	draw_colored_polygon(PackedVector2Array([p + Vector2(-h * 0.28, 0), p + Vector2(h * 0.28, 0), p + Vector2(h * 0.16, -h * 0.7), p + Vector2(-h * 0.16, -h * 0.7)]), _fa(col))
-	draw_circle(p + Vector2(0, -h * 0.82), h * 0.11, _fa(col), true, -1.0, true)
-	draw_line(p + Vector2(-h * 0.2, -h * 0.6), p + Vector2(-h * 0.45, -h * 0.25), _fa(col), h * 0.06, true)
-	draw_line(p + Vector2(h * 0.2, -h * 0.6), p + Vector2(h * 0.45, -h * 0.25), _fa(col), h * 0.06, true)
+	var cloak := PackedVector2Array([p + Vector2(-0.34, 0) * h, p + Vector2(-0.3, -0.42) * h, p + Vector2(-0.24, -0.68) * h, p + Vector2(-0.09, -0.75) * h, p + Vector2(0.09, -0.75) * h,
+		p + Vector2(0.24, -0.68) * h, p + Vector2(0.3, -0.42) * h, p + Vector2(0.34, 0) * h, p + Vector2(0.19, -0.05) * h, p + Vector2(0.06, 0.0) * h, p + Vector2(-0.1, -0.06) * h, p + Vector2(-0.22, 0.0) * h])
+	draw_colored_polygon(cloak, _fa(col))
+	Ink.dot(self, p + Vector2(0, -0.84) * h, h * 0.105, _fa(col))
+	# the fire behind finds one edge of him
+	var edge := _fa(Color(1.6, 0.5, 0.14, 0.55))
+	draw_line(cloak[4], cloak[5], edge, maxf(1.2, h * 0.008), true)
+	draw_line(cloak[5], cloak[6], edge, maxf(1.2, h * 0.008), true)
+	draw_line(cloak[6], cloak[7], _fa(Color(1.6, 0.5, 0.14, 0.3)), maxf(1.2, h * 0.008), true)
 	if crown:
 		_crown(p + Vector2(0, -h * 1.0), h * 0.12, 0.8 + 0.2 * sin(clock * 3.0))
 
 
 func _tree(x: float, base: float, h: float, col: Color) -> void:
-	draw_line(Vector2(x, base), Vector2(x, base - h), _fa(col), 6.0, true)
-	for i in 4:
-		var by := base - h * (0.4 + i * 0.16)
+	var c := _fa(col)
+	draw_primitive(PackedVector2Array([Vector2(x - 7, base), Vector2(x + 7, base), Vector2(x + 2, base - h), Vector2(x - 2, base - h)]), PackedColorArray([c, c, c, c]), PackedVector2Array())
+	for i in 6:
+		var by := base - h * (0.34 + i * 0.11)
 		var s := 1.0 if i % 2 == 0 else -1.0
-		draw_line(Vector2(x, by), Vector2(x + s * h * 0.28, by - h * 0.14), _fa(col), 3.0, true)
+		var tip := Vector2(x + s * h * (0.3 - i * 0.025), by - h * 0.15)
+		draw_line(Vector2(x, by), tip, c, 4.0 - i * 0.4, true)
+		draw_line(Vector2(x, by).lerp(tip, 0.55), tip + Vector2(s * h * 0.05, -h * 0.1), c, 2.0, true)
+		draw_line(Vector2(x, by).lerp(tip, 0.75), Vector2(x, by).lerp(tip, 0.75) + Vector2(-s * h * 0.04, -h * 0.09), c, 1.5, true)
+
+
+## Laid over every backdrop: the corners fall away into black and a pool of shadow sits behind the words.
+func _finish() -> void:
+	var w := size.x
+	var h := size.y
+	var edge := Color(0, 0, 0, 0.8 * fade)
+	var clear := Color(0, 0, 0, 0)
+	var m := w * 0.24
+	draw_primitive(PackedVector2Array([Vector2(0, 0), Vector2(m, 0), Vector2(m, h), Vector2(0, h)]), PackedColorArray([edge, clear, clear, edge]), PackedVector2Array())
+	draw_primitive(PackedVector2Array([Vector2(w, 0), Vector2(w - m, 0), Vector2(w - m, h), Vector2(w, h)]), PackedColorArray([edge, clear, clear, edge]), PackedVector2Array())
+	draw_primitive(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h * 0.34), Vector2(0, h * 0.34)]), PackedColorArray([edge, edge, clear, clear]), PackedVector2Array())
+	draw_primitive(PackedVector2Array([Vector2(0, h), Vector2(w, h), Vector2(w, h * 0.74), Vector2(0, h * 0.74)]), PackedColorArray([edge, edge, clear, clear]), PackedVector2Array())
+	draw_texture_rect(Ink.soft_tex(), Rect2(w * 0.08, h * 0.2, w * 0.84, h * 0.52), false, Color(0, 0, 0, 0.55 * fade))
 
 
 func _backdrop() -> void:
@@ -278,8 +332,8 @@ func _backdrop() -> void:
 			for i in 4:
 				var lx := w * (0.3 + i * 0.13)
 				draw_line(Vector2(lx, h * 0.2), Vector2(lx, h * 0.2 + 70), _fa(Color(0.2, 0.15, 0.1)), 2.0)
-				draw_circle(Vector2(lx, h * 0.2 + 80), 12 + sin(clock * 6.0 + i) * 1.5, _fa(Color(2.6, 1.5, 0.5, 0.9)), true, -1.0, true)
-				draw_circle(Vector2(lx, h * 0.2 + 80), 70, _fa(Color(1.6, 0.8, 0.3, 0.08)), true, -1.0, true)
+				Ink.glow(self, Vector2(lx, h * 0.2 + 80), (12 + sin(clock * 6.0 + i) * 1.5) * 1.5, _fa(Color(2.6, 1.5, 0.5, 0.9)))
+				Ink.glow(self, Vector2(lx, h * 0.2 + 80), (70) * 1.5, _fa(Color(1.6, 0.8, 0.3, 0.08)))
 			draw_rect(Rect2(0, base, w, h), _fa(Color(0.04, 0.03, 0.025)))
 			for i in 2:
 				draw_line(Vector2(w * 0.4 + i * 70, base), Vector2(w * 0.5 + i * 160, h), _fa(Color(0.2, 0.15, 0.1)), 4.0)
@@ -292,7 +346,7 @@ func _backdrop() -> void:
 				draw_rect(Rect2(x - 8, h * 0.18 - 14, 62, 16), _fa(Color(0.07, 0.05, 0.1)))
 			draw_rect(Rect2(0, base, w, h), _fa(Color(0.025, 0.02, 0.035)))
 			_figure(Vector2(w * 0.5, base), 260.0, Color(0.14, 0.08, 0.2))
-			draw_circle(Vector2(w * 0.5, base - 190), 90.0, _fa(Color(1.6, 0.5, 1.0, 0.1 + 0.04 * sin(clock * 2.0))), true, -1.0, true)
+			Ink.glow(self, Vector2(w * 0.5, base - 190), (90.0) * 1.5, _fa(Color(1.6, 0.5, 1.0, 0.1 + 0.04 * sin(clock * 2.0))))
 			_embers(40, Color(2.2, 0.5, 1.2, 0.7))
 		"act5":
 			_sky(Color(0.05, 0.01, 0.01), Color(0.7, 0.15, 0.04))

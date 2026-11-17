@@ -1,6 +1,17 @@
 class_name Projectile
 extends Node2D
 
+const Ink := preload("res://scripts/fx/ink.gd")
+
+## The bone lance, point toward +x: the pieces of its fill, their shading, and its inked edge as line
+## segments. Built once and shared, so drawing a lance allocates nothing.
+static var _lance: Array[PackedVector2Array] = []
+static var _lance_cols: Array[PackedColorArray] = []
+static var _lance_edge := PackedVector2Array()
+## A thin bright ring with a soft outside, for the crown of fire around the king's orbs.
+static var _halo: Texture2D
+static var _no_uv := PackedVector2Array()
+
 var world: World
 var kind := "ember"
 var dir := Vector2.RIGHT
@@ -16,10 +27,12 @@ var hit := {}
 var t := 0.0
 var light: PointLight2D
 var src: Actor
+var _seed := 0.0
 
 
 func init() -> void:
 	material = World.unshaded_add
+	_seed = randf() * 10.0
 	src = opts.get("src", null)
 	match kind:
 		"ember":
@@ -31,10 +44,12 @@ func init() -> void:
 			radius = 10.0
 			life = 0.85
 			pierce = true
+			_use_lance()
 		"shard":
 			radius = 7.0
 			life = 0.4
 			pierce = true
+			_use_lance()
 		"fireball":
 			radius = 11.0
 			life = 3.0
@@ -43,6 +58,8 @@ func init() -> void:
 			radius = 13.0
 			life = 5.0
 			light = world.make_light(Color(1.0, 0.4, 0.15), 0.6, 200.0)
+			if _halo == null:
+				_halo = _ring_tex()
 		"firewave":
 			radius = 46.0
 			life = 0.55
@@ -147,25 +164,134 @@ func _trail(_dt: float) -> void:
 func _draw() -> void:
 	match kind:
 		"ember":
-			draw_circle(Vector2.ZERO, 14, Color(1.6, 0.5, 0.12, 0.25), true, -1.0, true)
-			draw_colored_polygon(PackedVector2Array([Vector2(10, 0), Vector2(-22, -6), Vector2(-30, 0), Vector2(-22, 6)]), Color(2.6, 0.8, 0.2, 0.8))
-			draw_circle(Vector2.ZERO, 6, Color(4.0, 2.4, 1.0), true, -1.0, true)
+			# a bolt of fire: a white-hot bead dragging two soft tails
+			var fl := 1.0 + 0.12 * sin(t * 47.0 + _seed) + 0.08 * sin(t * 71.0)
+			Ink.glow(self, Vector2(-4, 0), 27.0, Color(1.5, 0.45, 0.1, 0.3))
+			_comet(13.0, 60.0 * fl, Color(2.2, 0.6, 0.13, 0.75))
+			_comet(7.0, 30.0 * fl, Color(3.4, 1.5, 0.45, 0.95))
+			Ink.dot(self, Vector2(1, 0), 3.0, Color(4.0, 3.0, 1.6))
 		"bone", "shard":
 			var s := 1.0 if kind == "bone" else 0.6
-			draw_colored_polygon(PackedVector2Array([Vector2(26, 0) * s, Vector2(-6, -5) * s, Vector2(-26, -2) * s, Vector2(-26, 2) * s, Vector2(-6, 5) * s]), Color(1.5, 1.45, 1.3))
-			draw_line(Vector2(-26, 0) * s, Vector2(-60, 0) * s, Color(0.6, 1.2, 1.1, 0.35), 4.0 * s, true)
+			# the cold light that carries it, strung out behind
+			draw_texture_rect_region(Ink.soft_tex(), Rect2(-98.0 * s, -8.0 * s, 80.0 * s, 16.0 * s), Rect2(0, 0, 32, 64), Color(0.5, 1.3, 1.15, 0.45))
+			Ink.glow(self, Vector2(4.0 * s, 0), 24.0 * s, Color(0.45, 1.15, 1.0, 0.2))
+			# the lance itself, turned over when it flies left so its pale side stays uppermost
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2(s, s if dir.x >= 0.0 else -s))
+			for i in _lance.size():
+				draw_primitive(_lance[i], _lance_cols[i], _no_uv)
+			draw_multiline(_lance_edge, Ink.LINE, 1.7, true)
+			draw_line(Vector2(-17, -1.3), Vector2(18, -1.2), Color(1.25, 1.2, 1.05, 0.7), 1.0, true)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		"fireball":
-			draw_circle(Vector2.ZERO, 18, Color(1.5, 0.4, 0.1, 0.25), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 10, Color(2.8, 0.8, 0.2), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 5, Color(4.0, 2.2, 0.9), true, -1.0, true)
+			# a thrown ball of fire: heavier and redder than the player's bolts, with flames streaming off it
+			var pulse := 1.0 + 0.08 * sin(t * 22.0 + _seed)
+			Ink.glow(self, Vector2.ZERO, 34.0, Color(1.5, 0.3, 0.07, 0.32))
+			_flames_behind(Vector2(3, 0), 9.0, 42.0, Color(2.4, 0.55, 0.11, 0.75), Color(1.8, 0.28, 0.05, 0.6))
+			_flames_behind(Vector2(2, 0), 5.5, 25.0, Color(3.4, 1.4, 0.38, 0.95), Color(2.8, 0.8, 0.18, 0.85))
+			Ink.glow(self, Vector2.ZERO, 18.0 * pulse, Color(3.0, 0.8, 0.18, 0.95))
+			Ink.dot(self, Vector2(1.5, 0), 4.0, Color(4.0, 2.6, 1.1))
 		"king_orb":
-			draw_circle(Vector2.ZERO, 20, Color(1.8, 0.3, 0.08, 0.3), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 12, Color(3.0, 0.6, 0.15), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 6, Color(4.0, 2.0, 0.8), true, -1.0, true)
+			# the Ember King's orbs: slow, molten, and crowned with a ring of fire that beats like a heart
+			var beat := 1.0 + 0.1 * sin(t * 9.0 + _seed)
+			Ink.glow(self, Vector2.ZERO, 44.0, Color(1.6, 0.24, 0.06, 0.3))
+			_flames_behind(Vector2(4, 0), 11.0, 32.0, Color(2.4, 0.45, 0.09, 0.7), Color(1.7, 0.2, 0.04, 0.55))
+			Ink.glow(self, Vector2.ZERO, 22.0 * beat, Color(3.0, 0.5, 0.1, 0.95))
+			var hr := 19.0 * beat
+			draw_texture_rect(_halo, Rect2(-hr, -hr, hr * 2.0, hr * 2.0), false, Color(3.6, 1.4, 0.35, 0.85))
+			# two sparks circling it
+			var orbit := Vector2.from_angle(t * 7.0 + _seed) * 15.0 * beat
+			Ink.dot(self, orbit, 2.0, Color(4.0, 2.4, 1.0))
+			Ink.dot(self, -orbit, 2.0, Color(4.0, 2.4, 1.0))
+			Ink.dot(self, Vector2.ZERO, 5.0, Color(4.0, 2.2, 0.9))
 		"firewave":
-			var a := clampf(life / 0.2, 0.0, 1.0)
-			draw_arc(Vector2(-20, 0), radius, -1.0, 1.0, 20, Color(3.0, 0.9, 0.2, 0.7 * a), 10.0, true)
-			draw_arc(Vector2(-26, 0), radius * 0.9, -0.9, 0.9, 20, Color(4.0, 2.0, 0.8, 0.5 * a), 4.0, true)
+			_draw_wave(clampf(life / 0.2, 0.0, 1.0))
+
+
+## A soft teardrop: a round head at the origin and a tail thinning out behind it.
+func _comet(head: float, tail: float, col: Color) -> void:
+	var soft := Ink.soft_tex()
+	draw_texture_rect_region(soft, Rect2(-tail, -head, tail, head * 2.0), Rect2(0, 0, 32, 64), col)
+	draw_texture_rect_region(soft, Rect2(0, -head, head, head * 2.0), Rect2(32, 0, 32, 64), col)
+
+
+## A tongue of flame laid along the path already flown, rooted at `at`.
+func _flames_behind(at: Vector2, w: float, h: float, hot: Color, cool: Color) -> void:
+	draw_set_transform(at, -PI * 0.5, Vector2.ONE)
+	Ink.flame(self, Vector2.ZERO, w, h, t, _seed + w, hot, cool)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## A crescent of fire as wide as the wave's reach: white-hot along its leading edge and torn into
+## tongues where it trails away. Built from quads, each fading from the edge backward.
+func _draw_wave(a: float) -> void:
+	var r := radius + 2.0
+	var c0 := Vector2(-20, 0)
+	draw_texture_rect(Ink.soft_tex(), Rect2(-52.0, -r * 1.2, 96.0, r * 2.4), false, Color(1.6, 0.4, 0.08, 0.26 * a))
+	var gone := Color(2.0, 0.35, 0.06, 0.0)
+	var lip_gone := Color(4.0, 2.2, 0.8, 0.0)
+	var n := 7
+	var lead0 := Vector2.ZERO
+	var back0 := 0.0
+	var k0 := 0.0
+	for i in n + 1:
+		var u := float(i) / n
+		var th := -1.05 + 2.1 * u
+		# 0 at the horns of the crescent, 1 in its middle
+		var k := sin(u * PI)
+		var lead := c0 + Vector2(cos(th), sin(th)) * r
+		var back := (8.0 + 30.0 * k) * (1.0 + 0.3 * sin(t * 23.0 + i * 2.4 + _seed)) + (10.0 if i % 2 == 1 else 0.0)
+		if i > 0:
+			var c_a := Color(3.2, 1.0, 0.24, 0.85 * a * (0.2 + 0.8 * k0))
+			var c_b := Color(3.2, 1.0, 0.24, 0.85 * a * (0.2 + 0.8 * k))
+			draw_primitive(PackedVector2Array([lead0, lead, lead - Vector2(back, 0), lead0 - Vector2(back0, 0)]), PackedColorArray([c_a, c_b, gone, gone]), _no_uv)
+			var l_a := Color(4.0, 2.6, 1.1, a * k0)
+			var l_b := Color(4.0, 2.6, 1.1, a * k)
+			draw_primitive(PackedVector2Array([lead0, lead, lead - Vector2(7.0, 0), lead0 - Vector2(7.0, 0)]), PackedColorArray([l_a, l_b, lip_gone, lip_gone]), _no_uv)
+		lead0 = lead
+		back0 = back
+		k0 = k
+
+
+## Bone is solid: it has to cover what is behind it, so it is drawn on the plain unlit layer.
+func _use_lance() -> void:
+	material = World.unshaded
+	if not _lance.is_empty():
+		return
+	var top := Color(1.0, 0.96, 0.84)
+	var deep := Color(0.4, 0.36, 0.33)
+	var pieces := [
+		[Vector2(30, 0), Vector2(8, -3.6), Vector2(8, 3.6)],
+		[Vector2(8, -3.6), Vector2(-19, -2.8), Vector2(-19, 2.8), Vector2(8, 3.6)],
+		[Vector2(-19, -2.8), Vector2(-23, -5.4), Vector2(-23, 5.4), Vector2(-19, 2.8)],
+		[Vector2(-23, -5.4), Vector2(-28, -3.8), Vector2(-28, 3.8), Vector2(-23, 5.4)]]
+	for piece in pieces:
+		var pts := PackedVector2Array(piece)
+		var cols := PackedColorArray()
+		for p in pts:
+			cols.append(top.lerp(deep, clampf((p.y + 5.4) / 10.8, 0.0, 1.0)))
+		_lance.append(pts)
+		_lance_cols.append(cols)
+	var loop := [Vector2(30, 0), Vector2(8, -3.6), Vector2(-19, -2.8), Vector2(-23, -5.4), Vector2(-28, -3.8), Vector2(-28, 3.8), Vector2(-23, 5.4), Vector2(-19, 2.8), Vector2(8, 3.6)]
+	for i in loop.size():
+		_lance_edge.append(loop[i])
+		_lance_edge.append(loop[(i + 1) % loop.size()])
+	# the groove between the two knuckles of the joint
+	_lance_edge.append(Vector2(-28, 0))
+	_lance_edge.append(Vector2(-24.5, 0))
+
+
+static func _ring_tex() -> Texture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.6, 0.72, 0.8, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = 64
+	tex.height = 64
+	return tex
 
 
 func _s() -> Actor:

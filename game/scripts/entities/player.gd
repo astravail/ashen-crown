@@ -885,79 +885,119 @@ func _c(c: Color, a: float) -> Color:
 	return s
 
 
-func _legs(step: float, col: Color, a: float, spread := 6.0, h := 16.0) -> void:
-	draw_line(Vector2(-spread, -h), Vector2(-spread + step * 5.0, 0), _c(col, a), 6.0, true)
-	draw_line(Vector2(spread, -h), Vector2(spread - step * 5.0, 0), _c(col, a), 6.0, true)
+func _mirror(pts: Array, side: float, y: float) -> PackedVector2Array:
+	# Shapes are drawn facing right; this turns them to face the way the hero is aiming.
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(Vector2(p.x * side, p.y + y))
+	if side < 0.0:
+		out.reverse()
+	return out
 
 
 func _draw_knight(bob: float, step: float, side: float, a: float) -> void:
-	var steel := Color(0.25, 0.24, 0.25)
-	var dark := Color(0.12, 0.11, 0.115)
-	_legs(step, dark, a, 7.0, 18.0)
+	var steel := _c(Color(0.37, 0.36, 0.385), a)
+	var iron := _c(Color(0.15, 0.14, 0.15), a)
+	var cloth := _c(Game.accent_color(), a)
+	var line := Color(Ink.LINE.r, Ink.LINE.g, Ink.LINE.b, a)
 	var y := -18.0 + bob
-	# Shield arm behind when facing away from shield side
-	var body := PackedVector2Array([Vector2(-13, y), Vector2(13, y), Vector2(16, y - 26), Vector2(-16, y - 26)])
-	draw_colored_polygon(body, _c(steel, a))
-	draw_colored_polygon(PackedVector2Array([Vector2(-6, y), Vector2(6, y), Vector2(5, y - 22), Vector2(-5, y - 22)]), _c(Game.accent_color(), a))
-	draw_circle(Vector2(-16, y - 24), 8.0, _c(Color(0.3, 0.29, 0.3), a), true, -1.0, true)
-	draw_circle(Vector2(16, y - 24), 8.0, _c(Color(0.3, 0.29, 0.3), a), true, -1.0, true)
-	# Helm
-	draw_rect(Rect2(-9, y - 44, 18, 20), _c(Color(0.3, 0.29, 0.3), a))
-	draw_circle(Vector2(0, y - 44), 9.0, _c(Color(0.3, 0.29, 0.3), a), true, -1.0, true)
-	draw_line(Vector2(0, y - 54), Vector2(0, y - 26), _c(Color(0.2, 0.19, 0.2), a), 2.0)
-	# Shield on the off side
+	var sway := step * 3.0
+	# A cloak in the house colour, torn at the hem, trailing a beat behind the stride
+	Ink.shape(self, PackedVector2Array([Vector2(-13, y - 25), Vector2(13, y - 25), Vector2(15 - sway, y + 6), Vector2(9 - sway, y + 13), Vector2(3 - sway, y + 7),
+		Vector2(-4 - sway, y + 14), Vector2(-10 - sway, y + 8), Vector2(-15 - sway, y + 11)]), cloth.darkened(0.3), cloth.darkened(0.72), 2.0, line)
+	Ink.limb(self, Vector2(-7, -19), Vector2(-7 + step * 5.0, 0), 8.0, 6.0, iron.lightened(0.16), iron, 1.8, line)
+	Ink.limb(self, Vector2(7, -19), Vector2(7 - step * 5.0, 0), 8.0, 6.0, iron.lightened(0.16), iron, 1.8, line)
+	var chest := PackedVector2Array([Vector2(-13, y), Vector2(13, y), Vector2(16, y - 14), Vector2(14, y - 27), Vector2(-14, y - 27), Vector2(-16, y - 14)])
+	Ink.shape(self, chest, steel.lightened(0.1), steel.darkened(0.5), 2.0, line)
+	Ink.shape(self, PackedVector2Array([Vector2(-6, y + 5), Vector2(6, y + 5), Vector2(5, y - 22), Vector2(-5, y - 22)]), cloth.lightened(0.08), cloth.darkened(0.45), 1.5, line)
+	draw_line(Vector2(-13, y - 2), Vector2(13, y - 2), _c(Color(0.2, 0.13, 0.08), a), 3.0, true)
+	draw_rect(Rect2(-2.5, y - 4.5, 5, 5), _c(Color(0.62, 0.5, 0.26), a))
+	Ink.oval(self, Vector2(-16, y - 24), 8.5, 7.5, steel.lightened(0.22), steel.darkened(0.3), 2.0, 0.0, line)
+	Ink.oval(self, Vector2(16, y - 24), 8.5, 7.5, steel.lightened(0.22), steel.darkened(0.3), 2.0, 0.0, line)
+	# Great helm: a ridge down the face, a slit to see through, holes to breathe through
+	Ink.shape(self, PackedVector2Array([Vector2(-9, y - 27), Vector2(9, y - 27), Vector2(10, y - 42), Vector2(7, y - 51), Vector2(0, y - 54), Vector2(-7, y - 51), Vector2(-10, y - 42)]),
+		steel.lightened(0.24), steel.darkened(0.25), 2.0, line)
+	draw_line(Vector2(0, y - 53), Vector2(0, y - 29), _c(Color(0.16, 0.15, 0.16), a), 1.5, true)
+	draw_line(Vector2(-7.5, y - 40), Vector2(7.5, y - 40), _c(Color(0.02, 0.015, 0.015), a), 3.2, true)
+	for i in 3:
+		Ink.dot(self, Vector2(side * (2.5 + i * 2.2), y - 33.5), 0.8, _c(Color(0.05, 0.045, 0.05), a))
+	draw_line(Vector2(-8.5, y - 47), Vector2(-5.5, y - 51), Color(1, 1, 1, 0.3 * a), 1.3, true)
+	Ink.shape(self, _mirror([Vector2(0, -54), Vector2(-4, -61), Vector2(-14, -56), Vector2(-10, -49)], side, y), cloth.lightened(0.1), cloth.darkened(0.35), 1.5, line)
+	# Kite shield on the off hand
 	var sx := -side * 18.0
-	var shield := PackedVector2Array([Vector2(sx - 11, y - 30), Vector2(sx + 11, y - 30), Vector2(sx + 10, y - 12), Vector2(sx, y + 2), Vector2(sx - 10, y - 12)])
-	draw_colored_polygon(shield, _c(Color(0.17, 0.15, 0.15), a))
-	draw_polyline(shield + PackedVector2Array([shield[0]]), _c(Color(0.45, 0.36, 0.25), a), 2.0, true)
+	var shield := PackedVector2Array([Vector2(sx - 11, y - 31), Vector2(sx + 11, y - 31), Vector2(sx + 11, y - 13), Vector2(sx, y + 3), Vector2(sx - 11, y - 13)])
+	Ink.shape(self, shield, _c(Color(0.25, 0.21, 0.2), a), _c(Color(0.1, 0.085, 0.085), a), 2.2, line)
+	var trim := PackedVector2Array([Vector2(sx - 8, y - 28), Vector2(sx + 8, y - 28), Vector2(sx + 8, y - 14), Vector2(sx, y - 2), Vector2(sx - 8, y - 14), Vector2(sx - 8, y - 28)])
+	draw_polyline(trim, _c(Color(0.56, 0.43, 0.23), a), 1.6, true)
+	draw_line(Vector2(sx, y - 26), Vector2(sx, y - 6), cloth, 2.5, true)
+	draw_line(Vector2(sx - 6, y - 20), Vector2(sx + 6, y - 20), cloth, 2.5, true)
 	# Sword
 	var hand := Vector2(side * 16.0, y - 16)
 	var ang := aim_dir.angle()
 	if swing_t > 0.0:
 		var k := 1.0 - swing_t / 0.24
 		ang = swing_dir.angle() + swing_side * lerpf(-1.3, 1.3, ease(k, 0.4))
-	var tip := hand + Vector2(cos(ang), sin(ang)) * 50.0
-	draw_line(hand, tip, _c(Color(0.55, 0.52, 0.5), a), 5.0, true)
-	draw_line(hand - Vector2(cos(ang + PI / 2), sin(ang + PI / 2)) * 7.0, hand + Vector2(cos(ang + PI / 2), sin(ang + PI / 2)) * 7.0, _c(Color(0.3, 0.25, 0.2), a), 4.0)
+	var dir := Vector2(cos(ang), sin(ang))
+	var nrm := dir.orthogonal()
+	var blade := PackedVector2Array([hand + nrm * 2.8, hand + dir * 45.0 + nrm * 2.2, hand + dir * 53.0, hand + dir * 45.0 - nrm * 2.2, hand - nrm * 2.8])
+	Ink.shape(self, blade, _c(Color(0.8, 0.78, 0.76), a), _c(Color(0.5, 0.49, 0.52), a), 1.5, line)
+	draw_line(hand + dir * 5.0, hand + dir * 42.0, _c(Color(0.32, 0.32, 0.35), a), 1.0, true)
+	draw_line(hand - nrm * 8.0, hand + nrm * 8.0, line, 5.0, true)
+	draw_line(hand - nrm * 7.0, hand + nrm * 7.0, _c(Color(0.56, 0.43, 0.23), a), 2.6, true)
+	Ink.dot(self, hand - dir * 6.0, 2.6, _c(Color(0.56, 0.43, 0.23), a))
+	Ink.oval(self, hand - dir * 1.5, 4.5, 4.5, steel.lightened(0.1), steel.darkened(0.3), 1.5, 0.0, line)
 
 
 func _draw_gravecaller(bob: float, step: float, side: float, a: float) -> void:
-	var robe := Color(0.13, 0.15, 0.16)
+	var robe := _c(Color(0.17, 0.195, 0.21), a)
+	var line := Color(Ink.LINE.r, Ink.LINE.g, Ink.LINE.b, a)
+	var bone := _c(Color(0.8, 0.77, 0.68), a)
 	var y := -6.0 + bob
 	var sway := step * 3.0
-	var body := PackedVector2Array([Vector2(-17 + sway, 2), Vector2(17 + sway, 2), Vector2(11, y - 30), Vector2(0, y - 36), Vector2(-11, y - 30)])
-	draw_colored_polygon(body, _c(robe, a))
-	draw_colored_polygon(PackedVector2Array([Vector2(-4 + sway, 2), Vector2(4 + sway, 2), Vector2(3, y - 28), Vector2(-3, y - 28)]), _c(Game.accent_color().lerp(Color(0.22, 0.25, 0.25), 0.5), a))
-	# Hood
-	var hood := PackedVector2Array([Vector2(-12, y - 30), Vector2(12, y - 30), Vector2(10, y - 48), Vector2(side * 4.0, y - 58), Vector2(-10, y - 48)])
-	draw_colored_polygon(hood, _c(Color(0.16, 0.18, 0.19), a))
-	draw_circle(Vector2(side * 2.0, y - 41), 7.0, _c(Color(0.02, 0.02, 0.03), a), true, -1.0, true)
-	# Staff
+	Ink.shape(self, PackedVector2Array([Vector2(-11, y - 30), Vector2(11, y - 30), Vector2(14, y - 12), Vector2(17 + sway, 0), Vector2(11 + sway, 3), Vector2(6 + sway, -1), Vector2(sway, 4),
+		Vector2(-6 + sway, -1), Vector2(-12 + sway, 3), Vector2(-17 + sway, -1), Vector2(-14, y - 12)]), robe.lightened(0.12), robe.darkened(0.55), 2.0, line)
+	var stole := _c(Game.accent_color().lerp(Color(0.22, 0.25, 0.25), 0.5), a)
+	Ink.shape(self, PackedVector2Array([Vector2(-4 + sway * 0.6, 0), Vector2(4 + sway * 0.6, 0), Vector2(3, y - 28), Vector2(-3, y - 28)]), stole.lightened(0.1), stole.darkened(0.4), 1.3, line)
+	# A mantle over the shoulders, strung with knucklebones
+	Ink.shape(self, PackedVector2Array([Vector2(-14, y - 23), Vector2(0, y - 19), Vector2(14, y - 23), Vector2(11, y - 33), Vector2(-11, y - 33)]), robe.lightened(0.22), robe.darkened(0.2), 1.6, line)
+	for i in 5:
+		Ink.dot(self, Vector2(-10 + i * 5.0, y - 22.5 + absf(i - 2.0) * -1.2), 1.5, bone)
+	Ink.shape(self, _mirror([Vector2(-12, -30), Vector2(12, -30), Vector2(11, -46), Vector2(5, -59), Vector2(-2, -56), Vector2(-11, -47)], side, y), robe.lightened(0.2), robe.darkened(0.3), 2.0, line)
+	Ink.oval(self, Vector2(side * 2.0, y - 41), 6.5, 7.5, _c(Color(0.015, 0.018, 0.022), a), _c(Color(0.015, 0.018, 0.022), a), 0.0)
+	# A staff of black wood with a skull bound to its head
 	var hx := side * 16.0
 	var lift := -6.0 if swing_t > 0.0 else 0.0
-	draw_line(Vector2(hx, 2 + lift), Vector2(hx, y - 64 + lift), _c(Color(0.28, 0.24, 0.2), a), 3.5, true)
-	draw_circle(Vector2(hx, y - 64 + lift), 6.0, _c(Color(0.8, 0.77, 0.7), a), true, -1.0, true)
+	Ink.limb(self, Vector2(hx, 3 + lift), Vector2(hx, y - 58 + lift), 4.0, 3.2, _c(Color(0.26, 0.21, 0.17), a), _c(Color(0.1, 0.08, 0.065), a), 1.6, line)
+	draw_line(Vector2(hx - 3, y - 50 + lift), Vector2(hx + 3, y - 54 + lift), _c(Color(0.42, 0.34, 0.2), a), 1.5, true)
+	draw_line(Vector2(hx - 3, y - 54 + lift), Vector2(hx + 3, y - 50 + lift), _c(Color(0.42, 0.34, 0.2), a), 1.5, true)
+	Ink.oval(self, Vector2(hx, y - 64 + lift), 6.0, 6.5, bone, bone.darkened(0.4), 1.6, 0.0, line)
+	draw_rect(Rect2(hx - 3.5, y - 59.5 + lift, 7, 3.5), bone.darkened(0.25))
+	Ink.dot(self, Vector2(hx - 2.3, y - 64.5 + lift), 1.6, _c(Color(0.03, 0.03, 0.03), a))
+	Ink.dot(self, Vector2(hx + 2.3, y - 64.5 + lift), 1.6, _c(Color(0.03, 0.03, 0.03), a))
+	Ink.oval(self, Vector2(hx, y - 26 + lift), 3.8, 3.8, robe.lightened(0.25), robe, 1.4, 0.0, line)
 
 
 func _draw_witch(bob: float, step: float, side: float, a: float) -> void:
-	var robe := Color(0.2, 0.08, 0.08)
+	var robe := _c(Color(0.28, 0.095, 0.085), a)
+	var hat := _c(Color(0.13, 0.085, 0.085), a)
+	var line := Color(Ink.LINE.r, Ink.LINE.g, Ink.LINE.b, a)
 	var y := -6.0 + bob
 	var sway := step * 3.0
-	var body := PackedVector2Array([Vector2(-16 + sway, 2), Vector2(16 + sway, 2), Vector2(9, y - 30), Vector2(-9, y - 30)])
-	draw_colored_polygon(body, _c(robe, a))
-	draw_colored_polygon(PackedVector2Array([Vector2(-16 + sway, 2), Vector2(16 + sway, 2), Vector2(14 + sway, -4), Vector2(-14 + sway, -4)]), _c(Color(0.1, 0.05, 0.05), a))
-	draw_circle(Vector2(0, y - 36), 8.0, _c(Game.skin_color(), a), true, -1.0, true)
-	# Hair
-	draw_colored_polygon(PackedVector2Array([Vector2(-9, y - 38), Vector2(9, y - 38), Vector2(-side * 14.0, y - 18)]), _c(Game.hair_color(), a))
-	# Hat: wide brim and a bent point
-	draw_set_transform(Vector2(0, y - 42), 0.0, Vector2(1.0, 0.35))
-	draw_circle(Vector2.ZERO, 21.0, _c(Color(0.09, 0.06, 0.06), a), true, -1.0, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	var hat := PackedVector2Array([Vector2(-10, y - 43), Vector2(10, y - 43), Vector2(4, y - 62), Vector2(-side * 10.0, y - 72)])
-	draw_colored_polygon(hat, _c(Color(0.1, 0.065, 0.065), a))
-	# Arm reaching toward aim
+	Ink.shape(self, _mirror([Vector2(-8, -40), Vector2(8, -40), Vector2(-3, -25), Vector2(-15, -13), Vector2(-12, -30)], side, y), _c(Game.hair_color(), a).lightened(0.1), _c(Game.hair_color(), a).darkened(0.4), 1.5, line)
+	# A dress scorched black along the hem
+	Ink.shape(self, PackedVector2Array([Vector2(-9, y - 30), Vector2(9, y - 30), Vector2(12, y - 14), Vector2(16 + sway, 0), Vector2(10 + sway, 3), Vector2(5 + sway, -1), Vector2(sway, 4),
+		Vector2(-5 + sway, -1), Vector2(-11 + sway, 3), Vector2(-16 + sway, -1), Vector2(-12, y - 14)]), robe.lightened(0.14), _c(Color(0.05, 0.03, 0.03), a), 2.0, line)
+	draw_line(Vector2(-11.5, y - 15), Vector2(11.5, y - 15), _c(Color(0.6, 0.45, 0.2), a), 2.0, true)
+	draw_line(Vector2(-2, y - 15), Vector2(-4 + sway * 0.5, y - 5), _c(Color(0.6, 0.45, 0.2), a), 1.4, true)
+	var skin := _c(Game.skin_color(), a)
+	Ink.oval(self, Vector2(0, y - 36), 7.5, 8.0, skin.lightened(0.08), skin.darkened(0.3), 1.6, 0.0, line)
+	# Wide brim, and a point that has long since given up standing straight
+	Ink.oval(self, Vector2(0, y - 43), 21.0, 6.5, hat.lightened(0.12), hat.darkened(0.3), 2.0, 0.0, line)
+	Ink.shape(self, _mirror([Vector2(-10, -45), Vector2(10, -45), Vector2(6, -58), Vector2(-1, -66), Vector2(-12, -73), Vector2(-5, -62), Vector2(-7, -56)], side, y), hat.lightened(0.18), hat.darkened(0.25), 2.0, line)
+	draw_line(Vector2(-9.5, y - 47.5), Vector2(9.5, y - 47.5), _c(Color(0.62, 0.24, 0.1), a), 2.6, true)
 	var hand := Vector2(side * 10.0, y - 22) + aim_dir * (10.0 + (8.0 if swing_t > 0.0 else 0.0))
-	draw_line(Vector2(side * 8.0, y - 26), hand, _c(robe.lightened(0.1), a), 5.0, true)
+	Ink.limb(self, Vector2(side * 8.0, y - 27), hand, 6.0, 4.0, robe.lightened(0.18), robe.darkened(0.2), 1.6, line)
+	Ink.oval(self, hand, 3.2, 3.2, skin, skin.darkened(0.3), 1.3, 0.0, line)
 
 
 func _draw_glow() -> void:
@@ -968,11 +1008,12 @@ func _draw_glow() -> void:
 	match cls:
 		"knight", "crownbearer":
 			var y := -18.0 + bob
-			glow.draw_line(Vector2(-6, y - 40), Vector2(6, y - 40), Color(3.0, 1.2, 0.3), 2.5)
+			Ink.glow(glow, Vector2(0, y - 40), 11.0, Color(1.5, 0.5, 0.12, 0.4))
+			glow.draw_line(Vector2(-6, y - 40), Vector2(6, y - 40), Color(3.0, 1.2, 0.3), 2.0, true)
 			if molten_t > 0.0:
 				var r := molten_radius()
 				glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.6))
-				glow.draw_circle(Vector2.ZERO, r, Color(1.0, 0.25, 0.05, 0.12), true, -1.0, true)
+				Ink.dot(glow, Vector2.ZERO, r, Color(1.0, 0.25, 0.05, 0.12))
 				glow.draw_arc(Vector2.ZERO, r, 0.0, TAU, 48, Color(2.4, 0.7, 0.15, 0.4), 2.0, true)
 				glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 				glow.draw_line(Vector2(-12, y - 2), Vector2(12, y - 22), Color(2.6, 0.7, 0.15, 0.7), 2.0)
@@ -990,23 +1031,25 @@ func _draw_glow() -> void:
 		"gravecaller":
 			var y2 := -6.0 + bob
 			var lift := -6.0 if swing_t > 0.0 else 0.0
-			glow.draw_circle(Vector2(side * 2.0 - 3.0, y2 - 42), 1.6, Color(1.0, 3.0, 2.6), true, -1.0, true)
-			glow.draw_circle(Vector2(side * 2.0 + 3.0, y2 - 42), 1.6, Color(1.0, 3.0, 2.6), true, -1.0, true)
+			Ink.dot(glow, Vector2(side * 2.0 - 3.0, y2 - 42), 1.6, Color(1.0, 3.0, 2.6))
+			Ink.dot(glow, Vector2(side * 2.0 + 3.0, y2 - 42), 1.6, Color(1.0, 3.0, 2.6))
 			var fp := Vector2(side * 16.0, y2 - 72 + lift)
 			var f := 1.0 + 0.15 * sin(anim * 13.0)
-			glow.draw_circle(fp, 9.0 * f, Color(0.4, 1.4, 1.3, 0.35), true, -1.0, true)
-			glow.draw_colored_polygon(PackedVector2Array([fp + Vector2(-5, 4), fp + Vector2(5, 4), fp + Vector2(sin(anim * 7.0) * 2.0, -12 * f)]), Color(1.2, 3.0, 2.7))
+			Ink.glow(glow, fp, 20.0 * f, Color(0.4, 1.4, 1.3, 0.4))
+			Ink.flame(glow, fp + Vector2(0, 5), 5.5, 15.0, anim, 1.0, Color(1.2, 3.0, 2.7, 0.95), Color(0.5, 1.8, 1.6, 0.8))
+			Ink.flame(glow, fp + Vector2(0, 5), 2.8, 9.0, anim, 3.0, Color(2.6, 3.4, 3.2), Color(1.2, 3.0, 2.7, 0.9))
 		"pyrewitch":
 			var y3 := -6.0 + bob
 			var hand := Vector2(side * 10.0, y3 - 22) + aim_dir * (10.0 + (8.0 if swing_t > 0.0 else 0.0))
 			var heat := resource / 100.0
-			glow.draw_circle(hand, 5.0 + heat * 4.0, Color(3.0, 1.0 + heat, 0.25, 0.9), true, -1.0, true)
-			glow.draw_circle(hand, 12.0 + heat * 8.0, Color(1.6, 0.4, 0.1, 0.2), true, -1.0, true)
-			glow.draw_circle(Vector2(side * 3.0, y3 - 37), 1.4, Color(3.5, 1.5, 0.4), true, -1.0, true)
+			Ink.glow(glow, hand, 22.0 + heat * 14.0, Color(1.6, 0.4, 0.1, 0.45))
+			Ink.flame(glow, hand + Vector2(0, 3), 4.5 + heat * 3.0, 12.0 + heat * 10.0, anim, 2.0, Color(3.0, 1.0 + heat, 0.25, 0.95), Color(2.4, 0.6, 0.12, 0.8))
+			Ink.dot(glow, hand, 2.6 + heat * 2.0, Color(3.6, 2.2 + heat, 0.8))
+			Ink.dot(glow, Vector2(side * 3.0, y3 - 37), 1.4, Color(3.5, 1.5, 0.4))
 			if ult_t > 0.0:
 				for i in 3:
 					var w := sin(anim * 8.0 + i * 2.0) * 10.0
-					glow.draw_colored_polygon(PackedVector2Array([Vector2(-14 + i * 14, -6), Vector2(-4 + i * 14, -6), Vector2(-9 + i * 14 + w, -70 - i * 6)]), Color(3.0, 0.9 + i * 0.4, 0.2, 0.55))
-				glow.draw_circle(Vector2(0, -30), 34.0, Color(1.6, 0.4, 0.1, 0.2), true, -1.0, true)
+					Ink.tri(glow, Vector2(-14 + i * 14, -6), Vector2(-4 + i * 14, -6), Vector2(-9 + i * 14 + w, -70 - i * 6), Color(3.0, 0.9 + i * 0.4, 0.2, 0.55))
+				Ink.glow(glow, Vector2(0, -30), 52.0, Color(1.6, 0.4, 0.1, 0.32))
 	if invuln_t > 0.0 and int(anim * 20.0) % 2 == 0:
 		glow.draw_arc(Vector2(0, -24), 28.0, 0.0, TAU, 24, Color(2.0, 1.6, 1.2, 0.35), 2.0, true)
