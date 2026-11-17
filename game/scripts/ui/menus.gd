@@ -420,14 +420,42 @@ func show_customize(cls: String) -> void:
 func show_settings(back: Callable) -> void:
 	_settings_back = back
 	var c := _root(0.78)
-	var v := _center_box(c, 16)
-	v.add_child(_label("SETTINGS", Game.font_display_bold, 40, Color(0.95, 0.86, 0.74), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_rule(320))
+	var m := MarginContainer.new()
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 36)
+	c.add_child(m)
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 12)
+	m.add_child(page)
+	# header: Back in the top left corner, the title in the middle
+	var head := HBoxContainer.new()
+	page.add_child(head)
+	var back_b := _button("◀  Back", func():
+		Game.save_settings()
+		_settings_back.call(), 170.0, 46.0)
+	head.add_child(back_b)
+	var title := _label("SETTINGS", Game.font_display_bold, 40, Color(0.95, 0.86, 0.74), HORIZONTAL_ALIGNMENT_CENTER)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var balance := Control.new()
+	balance.custom_minimum_size = Vector2(170, 0)
+	head.add_child(balance)
+	page.add_child(_rule(320))
+	# everything else scrolls, so no setting is ever out of reach
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	page.add_child(scroll)
+	var cc := CenterContainer.new()
+	cc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(cc)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 40)
 	grid.add_theme_constant_override("v_separation", 18)
-	v.add_child(grid)
+	cc.add_child(grid)
 	var first: Control
 	for pair in [["Master volume", "master"], ["Music", "music"], ["Effects", "sfx"]]:
 		grid.add_child(_label(pair[0], Game.font_body, 22, Game.C_TEXT))
@@ -438,6 +466,7 @@ func show_settings(back: Callable) -> void:
 		s.value = Game.settings[pair[1]]
 		s.custom_minimum_size = Vector2(340, 28)
 		s.focus_mode = Control.FOCUS_ALL
+		s.scrollable = false
 		var key: String = pair[1]
 		s.value_changed.connect(func(val: float):
 			Game.settings[key] = val
@@ -457,14 +486,9 @@ func show_settings(back: Callable) -> void:
 			Sfx.play("ui_move", -8.0, 0.0))
 		grid.add_child(cb)
 	_settings_extra(grid)
-	var sp := Control.new()
-	sp.custom_minimum_size = Vector2(0, 16)
-	v.add_child(sp)
-	var back_b := _button("Back", func():
-		Game.save_settings()
-		_settings_back.call(), 260)
-	back_b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(back_b)
+	var pad := Control.new()
+	pad.custom_minimum_size = Vector2(0, 24)
+	grid.add_child(pad)
 	_focus_first(first)
 
 
