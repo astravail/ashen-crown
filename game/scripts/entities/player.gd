@@ -5,6 +5,9 @@ extends Actor
 var cls := "knight"
 var data: Dictionary
 var abilities: Array = []
+var _voice_cd := 0.0
+## Which ability each bar slot (primary, secondary, skill 1, skill 2) uses; the player arranges it.
+var slot_map: Array = [0, 1, 2, 3]
 var cds: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]
 var resource := 0.0
 var res_max := 100.0
@@ -57,6 +60,7 @@ func setup(class_id: String) -> void:
 	cls = class_id
 	data = Data.CLASSES[cls]
 	abilities = data.abilities
+	slot_map = Game.loadout_for(cls)
 	team = Team.PLAYER
 	radius = 15.0
 	base_hp = data.max_hp
@@ -289,6 +293,7 @@ func update(dt: float) -> void:
 	flask_cd = maxf(0.0, flask_cd - dt)
 	invuln_t = maxf(0.0, invuln_t - dt)
 	hurt_t = maxf(0.0, hurt_t - dt)
+	_voice_cd = maxf(0.0, _voice_cd - dt)
 	swing_t = maxf(0.0, swing_t - dt)
 	cast_t = maxf(0.0, cast_t - dt)
 	_update_aim()
@@ -428,13 +433,13 @@ func _handle_input() -> void:
 	if Input.is_action_just_pressed("ultimate"):
 		_try_cast(4)
 	if Input.is_action_pressed("attack_1") and world.hovered_loot == null:
-		_try_cast(0)
+		_try_cast(slot_map[0])
 	if Input.is_action_pressed("attack_2"):
-		_try_cast(1)
+		_try_cast(slot_map[1])
 	if Input.is_action_pressed("skill_1"):
-		_try_cast(2)
+		_try_cast(slot_map[2])
 	if Input.is_action_pressed("skill_2"):
-		_try_cast(3)
+		_try_cast(slot_map[3])
 
 
 func _drink() -> void:
@@ -446,6 +451,10 @@ func _drink() -> void:
 	heal(max_hp * 0.45 * (1.0 + 0.15 * mod("flaskmaker")))
 	Sfx.play("flask")
 	world.glow_fx.burst(global_position + Vector2(0, -20), 16, Color(2.4, 0.3, 0.25), 40, 160, 0.6, 2.5, Particles.EMBER, TAU, 0.0, 2.0, -100.0)
+
+
+func slot_ability(slot: int) -> int:
+	return 4 if slot >= 4 else int(slot_map[slot])
 
 
 func can_cast(i: int) -> bool:
@@ -844,6 +853,10 @@ func on_damaged(amount: float, _src: Actor, _opts: Dictionary) -> void:
 	if amount >= 1.0 and hurt_t <= 0.0:
 		hurt_t = 0.25
 		Sfx.play("hurt", -6.0)
+		# now and then the hero cries out, in their own voice
+		if _voice_cd <= 0.0 and randf() < 0.3:
+			_voice_cd = 2.0
+			Sfx.play("hurt_" + ("pyrewitch" if cls == "pyrewitch" else ("gravecaller" if cls == "gravecaller" else "knight")), -2.0, 0.06)
 		world.shake(3.0 + minf(8.0, amount / max_hp * 60.0))
 
 

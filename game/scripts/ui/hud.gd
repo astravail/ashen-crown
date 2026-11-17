@@ -329,7 +329,8 @@ func _frame(r: Rect2) -> void:
 	draw_rect(r, Color(0.07, 0.06, 0.055))
 
 
-func _slot(r: Rect2, i: int, p: Player) -> void:
+func _slot(r: Rect2, slot: int, p: Player) -> void:
+	var i := p.slot_ability(slot)
 	var a: Dictionary = p.abilities[i]
 	var ready := p.can_cast(i)
 	var cd: float = p.cds[i]
@@ -367,7 +368,7 @@ func _slot(r: Rect2, i: int, p: Player) -> void:
 		if p.cls == "pyrewitch" and cost < 0:
 			cs = "−%d" % int(-cost)
 		_text(r.position + Vector2(4, r.size.y - 5), cs, 13, Color(0.85, 0.75, 0.65, 0.9), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 3)
-	_center_text(r.get_center().x, r.end.y + 20, Game.key_label(a.action), 14, Color(0.75, 0.7, 0.65), Game.font_display_bold)
+	_center_text(r.get_center().x, r.end.y + 20, Game.key_label(["attack_1", "attack_2", "skill_1", "skill_2", "ultimate"][slot]), 14, Color(0.75, 0.7, 0.65), Game.font_display_bold)
 
 
 func _sweep(r: Rect2, k: float) -> void:

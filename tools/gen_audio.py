@@ -357,6 +357,32 @@ def sfx_hurt():
     return drive(d, 2.2)
 
 
+def sfx_hurt_voice(kind):
+    """The sound each hero makes when struck: a grunt, a wet gurgle, a sharp gasp."""
+    if kind == "knight":
+        p0 = random.uniform(82, 98)
+        d = voice(0.3, lambda x: p0 * (1.0 + 0.18 * math.exp(-x * 7)) * (1.0 - 0.25 * x), ["u", "o"], rough=0.9, breath=0.35, scale=0.9, sub=0.35)
+        shape = 1.6
+        k = 2.4
+    elif kind == "gravecaller":
+        p0 = random.uniform(120, 150)
+        d = voice(0.5, lambda x: p0 * (1.0 - 0.3 * x) * (1.0 + 0.05 * math.sin(TAU * 17 * x)), ["u", "e", "o"], rough=1.7, breath=0.9, scale=0.85, sub=0.1)
+        # the wet rattle in the throat
+        squelch(d, 0.02, 900, 3.0, 40, 1.2)
+        squelch(d, 0.14, 650, 3.0, 36, 1.0)
+        shape = 1.3
+        k = 2.8
+    else:
+        p0 = random.uniform(230, 270)
+        d = voice(0.3, lambda x: p0 * (1.0 + 0.4 * math.exp(-x * 5)) * (1.0 - 0.15 * x), ["a", "e", "a"], rough=0.5, breath=0.8, scale=1.1, sub=0.0)
+        shape = 1.9
+        k = 1.8
+    for i in range(len(d)):
+        x = i / len(d)
+        d[i] *= min(1.0, x * 50) * (1 - x) ** shape
+    return drive(d, k)
+
+
 def sfx_dodge():
     d = buf(0.28)
     lp = LP(500)
@@ -862,6 +888,11 @@ def main():
         sfx["growl_%d" % k] = sfx_growl()
     for k in (4, 5):
         sfx["enemy_death_%d" % k] = sfx_death()
+    # each hero's own voice when hurt, three takes each (added last so the older sounds stay as they were)
+    for kind in ("knight", "gravecaller", "pyrewitch"):
+        sfx["hurt_" + kind] = sfx_hurt_voice(kind)
+        for k in (2, 3):
+            sfx["hurt_%s_%d" % (kind, k)] = sfx_hurt_voice(kind)
     only = set(sys.argv[1:])
     for name, data in sfx.items():
         if only and name not in only:

@@ -1,5 +1,7 @@
 class_name Panels
 extends Control
+
+const Ink := preload("res://scripts/fx/ink.gd")
 ## Inventory, shops, stash, quests, waypoints and the skill tree.
 
 signal closed
@@ -172,9 +174,19 @@ class ItemSlot extends Control:
 		if item != null:
 			col = Items.color_of(item)
 			bg = Color(col.r * 0.16 + 0.05, col.g * 0.16 + 0.045, col.b * 0.16 + 0.04)
-		draw_rect(r, bg)
+		# a recessed well: darker at the top, lit from below by the item's own colour
+		draw_rect(r, bg.darkened(0.35))
+		draw_rect(Rect2(0, size.y * 0.45, size.x, size.y * 0.55), bg)
+		if item != null:
+			draw_texture_rect(Ink.soft_tex(), Rect2(-size.x * 0.1, size.y * 0.1, size.x * 1.2, size.y * 1.1), false, Color(col.r, col.g, col.b, 0.22 + 0.1 * float(item.rarity)))
+		# bevel: shadow on the upper and left edges, light on the lower and right
+		draw_rect(Rect2(0, 0, size.x, 2), Color(0, 0, 0, 0.55))
+		draw_rect(Rect2(0, 0, 2, size.y), Color(0, 0, 0, 0.45))
+		draw_rect(Rect2(0, size.y - 1, size.x, 1), Color(1, 1, 1, 0.07))
+		draw_rect(Rect2(size.x - 1, 0, 1, size.y), Color(1, 1, 1, 0.05))
 		if item != null:
 			var broken := Items.is_broken(item)
+			Icons.item(self, String(item.icon), size * 0.5 + Vector2(1.5, 2.5), size.x * 0.7, Color(0, 0, 0, 0.5))
 			Icons.item(self, String(item.icon), size * 0.5, size.x * 0.7, col if not broken else Color(0.5, 0.2, 0.2))
 			if broken:
 				draw_line(Vector2(6, 6), size - Vector2(6, 6), Color(0.8, 0.2, 0.2, 0.7), 2.0)
@@ -182,6 +194,10 @@ class ItemSlot extends Control:
 			var w := Game.font_display.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 			draw_string(Game.font_display, Vector2((size.x - w) * 0.5, size.y * 0.55), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.4, 0.36, 0.33))
 		draw_rect(r, col if not has_focus() else Game.C_EMBER_HOT, false, 2.0 if has_focus() else 1.0)
+		if item != null and int(item.rarity) >= 2:
+			# little studs at the corners for rare and legendary things
+			for cp in [Vector2(3, 3), Vector2(size.x - 4, 3), Vector2(3, size.y - 4), Vector2(size.x - 4, size.y - 4)]:
+				draw_rect(Rect2(cp, Vector2(1.5, 1.5)), Color(col.r, col.g, col.b, 0.9))
 		if price >= 0:
 			var txt := "%dg" % price
 			var tw := Game.font_body_bold.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
@@ -283,6 +299,189 @@ func _stats_box() -> Control:
 
 # ---------------------------------------------------------------- inventory / shop / stash
 
+
+# ---------------------------------------------------------------- abilities tab
+
+var _sel_ability := -1
+
+
+func _add_tabs(head: HBoxContainer, active: String) -> void:
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(30, 0)
+	head.add_child(gap)
+	for t in [["gear", "GEAR"], ["abilities", "ABILITIES"]]:
+		var b := _button(t[1], func():
+			_sel_ability = -1
+			if t[0] == "gear":
+				show_inventory("inv")
+			else:
+				show_abilities(), 150.0, 38.0)
+		if t[0] == active:
+			b.add_theme_color_override("font_color", Game.C_GOLD)
+			b.add_theme_stylebox_override("normal", _sb(Color(0.12, 0.08, 0.05), Ornate.GOLD_MID, 10))
+			b.disabled = false
+		head.add_child(b)
+
+
+class AbilityCard extends Control:
+	signal chosen
+	var ability: Dictionary = {}
+	var class_id := ""
+	var attached := ""
+	var selected := false
+	var fixed := false
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(520, 108)
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+
+	func _ready() -> void:
+		mouse_entered.connect(func(): grab_focus())
+
+	func _gui_input(e: InputEvent) -> void:
+		if (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT) or e.is_action_pressed("ui_accept"):
+			chosen.emit()
+			accept_event()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		var hot := selected or has_focus()
+		draw_rect(r, Color(0.13, 0.09, 0.06) if selected else Color(0.07, 0.06, 0.055))
+		draw_rect(Rect2(0, 0, 4, size.y), Ornate.GOLD_HI if selected else Color(0.3, 0.24, 0.2))
+		draw_rect(r, Game.C_EMBER_HOT if hot else Color(0.24, 0.2, 0.17), false, 2.0 if hot else 1.0)
+		var icon_box := Rect2(14, 20, 68, 68)
+		draw_rect(icon_box, Color(0.03, 0.026, 0.025))
+		draw_rect(icon_box, Color(0.4, 0.3, 0.2), false, 1.0)
+		Icons.draw(self, ability.id, icon_box.get_center(), 56.0, Color(1.0, 0.82, 0.6))
+		draw_string(Game.font_display_bold, Vector2(98, 28), String(ability.name).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 300, 19, Color(0.97, 0.88, 0.76))
+		draw_multiline_string(Game.font_body, Vector2(98, 48), String(ability.desc), HORIZONTAL_ALIGNMENT_LEFT, 400, 15, 3, Color(0.72, 0.68, 0.64))
+		var meta := "Cooldown %s s" % ("%.1f" % float(ability.cd))
+		if float(ability.cost) != 0.0 and class_id != "pyrewitch":
+			meta += "   ·   Cost %d" % int(ability.cost)
+		draw_string(Game.font_body, Vector2(98, 100), meta, HORIZONTAL_ALIGNMENT_LEFT, 360, 14, Color(0.55, 0.5, 0.46))
+		if attached != "":
+			var w := Game.font_display_bold.get_string_size(attached, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x + 20
+			draw_rect(Rect2(size.x - w - 10, 10, w, 26), Color(0.4, 0.12, 0.06))
+			draw_rect(Rect2(size.x - w - 10, 10, w, 26), Ornate.GOLD_MID, false, 1.0)
+			draw_string(Game.font_display_bold, Vector2(size.x - w, 29), attached, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.9, 0.7))
+
+
+class BarSlot extends Control:
+	signal chosen
+	var ability: Dictionary = {}
+	var key := ""
+	var armed := false
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(118, 150)
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+
+	func _ready() -> void:
+		mouse_entered.connect(func(): grab_focus())
+
+	func _gui_input(e: InputEvent) -> void:
+		if (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT) or e.is_action_pressed("ui_accept"):
+			chosen.emit()
+			accept_event()
+
+	func _process(_dt: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		draw_rect(r, Color(0.06, 0.05, 0.047))
+		var hot := armed or has_focus()
+		draw_rect(r, Ornate.GOLD_HI if hot else Color(0.3, 0.24, 0.2), false, 2.0 if hot else 1.0)
+		var box := Rect2(size.x * 0.5 - 40, 12, 80, 80)
+		draw_rect(box, Color(0.025, 0.02, 0.02))
+		draw_rect(box, Game.C_EMBER_HOT if armed else Color(0.45, 0.34, 0.22), false, 1.5)
+		if not ability.is_empty():
+			Icons.draw(self, ability.id, box.get_center(), 66.0, Color(1.0, 0.82, 0.6))
+			var w := Game.font_body_bold.get_string_size(String(ability.name), HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			draw_string(Game.font_body_bold, Vector2((size.x - minf(w, size.x - 8)) * 0.5, 112), String(ability.name), HORIZONTAL_ALIGNMENT_LEFT, size.x - 8, 14, Color(0.9, 0.84, 0.76))
+		var kw := Game.font_display_bold.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		draw_string(Game.font_display_bold, Vector2((size.x - kw) * 0.5, 138), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Game.C_GOLD)
+
+
+func show_abilities() -> void:
+	mode = "inv"
+	var cls: String = Game.class_id
+	var data: Dictionary = Data.CLASSES[cls]
+	var abil: Array = data.abilities
+	var map: Array = Game.loadout_for(cls)
+	var keys := ["attack_1", "attack_2", "skill_1", "skill_2"]
+	var v := _frame("ABILITIES", "")
+	var head: HBoxContainer = v.get_child(0)
+	_add_tabs(head, "abilities")
+	head.add_child(_gold_label())
+	v.add_child(_label("Pick an ability, then pick the button on your bar it should sit on.", Game.font_italic, 18, Color(0.62, 0.58, 0.54)))
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 40)
+	v.add_child(body)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 8)
+	body.add_child(list)
+	list.add_child(_label("YOUR ABILITIES", Game.font_display, 15, Color(0.6, 0.56, 0.52)))
+	var first: Control
+	for ai in 4:
+		var card := AbilityCard.new()
+		card.ability = abil[ai]
+		card.class_id = cls
+		card.selected = _sel_ability == ai
+		var slot_of := map.find(ai)
+		card.attached = Game.input_label(keys[slot_of], false) if slot_of >= 0 else ""
+		var idx := ai
+		card.chosen.connect(func():
+			Sfx.play("ui_select", -6.0, 0.0)
+			_sel_ability = -1 if _sel_ability == idx else idx
+			show_abilities())
+		list.add_child(card)
+		if first == null:
+			first = card
+	var ult := AbilityCard.new()
+	ult.ability = abil[4]
+	ult.class_id = cls
+	ult.attached = "ULTIMATE"
+	ult.modulate = Color(0.8, 0.8, 0.8)
+	list.add_child(ult)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 12)
+	body.add_child(right)
+	right.add_child(_label("YOUR BAR", Game.font_display, 15, Color(0.6, 0.56, 0.52)))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	right.add_child(row)
+	for si in 4:
+		var bs := BarSlot.new()
+		bs.ability = abil[map[si]]
+		bs.key = Game.input_label(keys[si], false)
+		bs.armed = _sel_ability >= 0
+		var sidx := si
+		bs.chosen.connect(func():
+			if _sel_ability < 0:
+				return
+			var m: Array = Game.loadout_for(cls)
+			var from: int = m.find(_sel_ability)
+			var tmp: int = m[sidx]
+			m[sidx] = _sel_ability
+			if from >= 0:
+				m[from] = tmp
+			Game.set_loadout(cls, m)
+			if world and world.player:
+				world.player.slot_map = m
+			Sfx.play("ui_select", -4.0, 0.0)
+			_sel_ability = -1
+			show_abilities())
+		row.add_child(bs)
+	right.add_child(_wrap(_label("Change the keys themselves in Settings, under Controls. The ultimate always stays on its own button.", Game.font_body, 16, Color(0.55, 0.52, 0.48)), 520.0))
+	v.add_child(_label("I / Esc  ·  close", Game.font_body, 15, Color(0.5, 0.47, 0.44)))
+	if first:
+		first.grab_focus.call_deferred()
+
+
+
 func show_inventory(m := "inv", v := "") -> void:
 	mode = m
 	vendor = v
@@ -311,6 +510,8 @@ func _build_items() -> void:
 	var title: String = {"inv": "INVENTORY", "smith": "HILD, ASHSMITH", "mystic": "VEYRA, MYSTIC", "stash": "STASH"}[mode]
 	var v := _frame(title, "")
 	var head: HBoxContainer = v.get_child(0)
+	if mode == "inv":
+		_add_tabs(head, "gear")
 	head.add_child(_gold_label())
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 26)
@@ -365,7 +566,13 @@ func _build_items() -> void:
 		eg.add_theme_constant_override("h_separation", 4)
 		eg.add_theme_constant_override("v_separation", 4)
 		left.add_child(eg)
-		for slot in Items.SLOTS:
+		# laid out like a body: helm over chest over boots, weapon on one side, ring and amulet on the other
+		for slot in ["", "helm", "amulet", "weapon", "chest", "ring", "", "boots", ""]:
+			if slot == "":
+				var gap2 := Control.new()
+				gap2.custom_minimum_size = Vector2(SLOT, SLOT)
+				eg.add_child(gap2)
+				continue
 			var es := _make_slot(_equipped(slot), String(Items.SLOT_LABEL[slot]))
 			es.key = "eq_" + slot
 			var sl: String = slot

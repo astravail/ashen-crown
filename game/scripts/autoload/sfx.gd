@@ -4,7 +4,7 @@ extends Node
 
 const SFX := ["swing", "hit", "hit_heavy", "fire_cast", "explode", "explode_small", "bone", "summon",
 	"enemy_death", "hurt", "dodge", "levelup", "pickup", "ui_move", "ui_select", "teleport", "freeze",
-	"ultimate", "roar", "flask", "fragment", "wave", "slam", "gore", "growl"]
+	"ultimate", "roar", "flask", "fragment", "wave", "slam", "gore", "growl", "hurt_knight", "hurt_gravecaller", "hurt_pyrewitch"]
 const MUSIC := ["music_title", "music_combat", "music_boss"]
 const AMBIENCE := ["amb_forest", "amb_crypt", "amb_marsh", "amb_hell"]
 

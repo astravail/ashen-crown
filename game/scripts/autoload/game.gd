@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.4"
+const VERSION := "0.5.5"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -36,6 +36,7 @@ var settings := {
 	"aim_assist": true,   # controller: aim at the nearest enemy when the right stick is idle
 	"stick_deadzone": 0.25,
 	"minimap": true,
+	"loadout": {},        # per class: which ability sits on which bar slot
 	"update_check": true,
 	"last_version": "",    # the version whose notes the player has seen
 	"brightness": 1.0,  # gamma of the world, calibrated in Settings
@@ -116,6 +117,12 @@ var update_url := ""
 
 ## What changed in each version, newest first. Shown in What's new, and once after every update.
 const RELEASE_NOTES := [
+	{"v": "0.5.5", "items": [
+		"Abilities tab in the inventory: put any ability on any button of your bar.",
+		"A better-looking inventory with a body-shaped equipment layout.",
+		"Each hero cries out in their own voice now and then when struck.",
+		"The Crownbearer is locked until you finish the game.",
+		"Health globes drop rarely."]},
 	{"v": "0.5.4", "items": [
 		"Life is now blood, and each class has its own matter in the other orb: molten cinder, drifting souls, rising flame.",
 		"Blood on the ground is more realistic: dark clotting rims, streaks and a mist of fine drops.",
@@ -402,6 +409,21 @@ func quest_marker() -> String:
 
 
 # ------------------------------------------------------------------ settings
+
+## Which ability each of the four bar slots uses for a class, always a permutation of 0..3.
+func loadout_for(cls: String) -> Array:
+	var m: Variant = settings.get("loadout", {}).get(cls, [0, 1, 2, 3])
+	if m is Array and m.size() == 4 and m.duplicate().map(func(x): return int(x)).has(0) and m.has(1) and m.has(2) and m.has(3):
+		return m.map(func(x): return int(x))
+	return [0, 1, 2, 3]
+
+
+func set_loadout(cls: String, m: Array) -> void:
+	var all: Dictionary = settings.get("loadout", {})
+	all[cls] = m
+	settings["loadout"] = all
+	save_settings()
+
 
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
