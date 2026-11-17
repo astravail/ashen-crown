@@ -308,6 +308,8 @@ class InputRelay extends Node:
 func handle_input(event: InputEvent) -> void:
 	if world == null or world.attract or _busy or world.player == null:
 		return
+	if tutorial and tutorial.current != "":
+		return
 	if event.is_action_pressed("pause"):
 		if hud and hud.big_map:
 			hud.close_map()

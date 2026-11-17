@@ -65,6 +65,10 @@ var _slide := 0.0
 var _poll := 0.0
 var _seen_cache: Array = []
 var _prev_hp := -1.0
+var _ok: Button
+var _off: Button
+var _froze := false
+const WAIT := 3.0
 
 
 func _ready() -> void:
@@ -96,13 +100,15 @@ func _ready() -> void:
 	h.add_theme_constant_override("separation", 12)
 	v.add_child(h)
 	var ok := Button.new()
-	ok.text = "Got it  [Enter]"
+	ok.text = "Close"
 	ok.custom_minimum_size = Vector2(200, 42)
 	ok.pressed.connect(dismiss)
 	ok.focus_mode = Control.FOCUS_NONE
 	h.add_child(ok)
+	_ok = ok
 	var off := Button.new()
 	off.text = "Turn tips off"
+	_off = off
 	off.custom_minimum_size = Vector2(160, 42)
 	off.focus_mode = Control.FOCUS_NONE
 	off.pressed.connect(func():
@@ -178,17 +184,30 @@ func show_tip(id: String) -> void:
 	_life = 0.0
 	_slide = 0.0
 	_card.visible = true
+	# the game holds still while the tip is read, and the tip cannot be waved away at once
+	_froze = not get_tree().paused
+	if _froze:
+		get_tree().paused = true
+	_ok.disabled = true
+	_off.disabled = true
 	Sfx.play("ui_move", -6.0, 0.0)
 
 
 func dismiss() -> void:
+	if current != "" and _life < WAIT:
+		return
 	current = ""
 	_card.visible = false
+	if _froze:
+		_froze = false
+		# resume, unless something else (the pause menu, a panel) has taken the pause over
+		if main == null or main._overlay == "":
+			get_tree().paused = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current != "" and event is InputEventKey and event.pressed and not event.echo \
-			and (event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER):
+	# closing a tip uses the Interact key, whatever the player has bound it to
+	if current != "" and event.is_action_pressed("interact") and not event.is_echo():
 		dismiss()
 		get_viewport().set_input_as_handled()
 
@@ -203,8 +222,10 @@ func _process(dt: float) -> void:
 		var e := 1.0 - pow(1.0 - _slide, 3.0)
 		var cs := _card.size
 		_card.position = Vector2(vs.x - cs.x - 36.0 + (1.0 - e) * (cs.x + 60.0), maxf(70.0, (vs.y - cs.y) * 0.4))
-		if _life > 45.0:
-			dismiss()
+		var left := WAIT - _life
+		_ok.disabled = left > 0.0
+		_off.disabled = left > 0.0
+		_ok.text = "Close  (%d)" % ceili(left) if left > 0.0 else "Close  [%s]" % Game.input_label("interact", Game.using_gamepad)
 		return
 	if not enabled():
 		return

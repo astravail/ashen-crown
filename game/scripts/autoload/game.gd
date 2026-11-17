@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.5"
+const VERSION := "0.5.6"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -117,6 +117,9 @@ var update_url := ""
 
 ## What changed in each version, newest first. Shown in What's new, and once after every update.
 const RELEASE_NOTES := [
+	{"v": "0.5.6", "items": [
+		"Tips appear at the moment they matter, freeze the game while you read, and can be closed after three seconds with your Interact key.",
+		"The game resumes when a tip is closed."]},
 	{"v": "0.5.5", "items": [
 		"Abilities tab in the inventory: put any ability on any button of your bar.",
 		"A better-looking inventory with a body-shaped equipment layout.",
