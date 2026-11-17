@@ -374,7 +374,7 @@ const VILLAGE := {
 	"id": "village", "name": "Cinderfall", "line": "A few fires. A few of the living.",
 	"style": "village", "size": Vector2i(78, 64), "ambient": "amb_forest",
 	"ground_a": Color(0.36, 0.31, 0.25), "ground_b": Color(0.17, 0.14, 0.12), "vein": Color(1.8, 0.8, 0.3), "vein_amt": 0.06,
-	"wall": Color(0.02, 0.02, 0.02), "pattern": 3.0, "modulate": Color(0.62, 0.58, 0.55),
+	"wall": Color(0.02, 0.02, 0.02), "pattern": 3.0, "modulate": Color(0.9, 0.84, 0.78),
 	"pool": {}, "packs": 0, "hp_mult": 1.0, "dmg_mult": 1.0, "props": [], "champion": {},
 }
 

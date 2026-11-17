@@ -297,7 +297,7 @@ func _draw_left(p: Player) -> void:
 		_text(Vector2(x, y), "HARDCORE", 14, Color(0.9, 0.35, 0.25), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 		y += 20
 	_text(Vector2(x, y), Game.diff().name, 14, Color(1.0, 0.75, 0.45), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
-	y += 4
+	y += 24
 	_text(Vector2(x, y), "%d gold" % Game.gold, 17, Color(1.0, 0.85, 0.3), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 24
 	if p.pending_levels > 0:

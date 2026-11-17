@@ -371,6 +371,7 @@ func _draw() -> void:
 		"brute": _draw_brute(walk)
 		"bloater": _draw_bloater(walk)
 		"wraith": _draw_wraith()
+	EnemyLooks.draw(self, walk)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_status_marks()
 	_draw_bar()

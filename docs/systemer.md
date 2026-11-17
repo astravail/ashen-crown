@@ -52,3 +52,9 @@ Spilleren kan knuse kronen eller bli den nye Askekongen.
 - Navn og utseende, 20 vanskelighetsgrader (byttes ett steg om gangen), hardcore med Hall of the Fallen.
 - Skill tree som starter blankt. Lagrede karakterer. Statistikk på tittelskjermen.
 - Grafikkinnstillinger (kvalitet, glød, kantutjevning, VSync, FPS-grense), FPS-teller og voice lines med undertekster.
+
+## Stemme, cutscenes og fiender (beta 0.3.1)
+
+- Voice lines bruker systemets talesyntese hvis den finnes (`speech-dispatcher` og `espeak-ng`). Uten den bruker spillet en egen formantsyntese med egen stemme per karakter og klasse. Den er et stemmemurmel, ikke tale. Ekte innspilte replikker kan legges inn i `Voice.speak()`.
+- Cutscenes er malte, animerte scener tegnet fra former: brennende by, kongen med kronen, én scene per act og kongen før bosskampen.
+- Hver variant av en fiende har eget tilbehør og animasjon (horn, vinger, klokker, flammer, hjelmlykter, magmasprekker) på toppen av grunnformen. Se `enemy_looks.gd`.

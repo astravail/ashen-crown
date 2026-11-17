@@ -34,7 +34,7 @@ func _ready() -> void:
 	panels = Panels.new()
 	ui_layer.add_child(panels)
 	cut_layer = CanvasLayer.new()
-	cut_layer.layer = 16
+	cut_layer.layer = 26
 	cut_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(cut_layer)
 	var top := CanvasLayer.new()
@@ -82,6 +82,20 @@ func _ready() -> void:
 	Game.quests_changed.connect(func(): if world and world.player: world._set_objective())
 	Game.quest_accepted.connect(func(_id): if world and world.player: world.spawn_quest_bosses())
 	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--voicetest"):
+			var vt: Node = load("res://scripts/debug/voice_test.gd").new()
+			add_child(vt)
+			return
+		if a.begins_with("--cutshots"):
+			var cn: Node = load("res://scripts/debug/cutshots.gd").new()
+			cn.main = self
+			add_child(cn)
+			return
+		if a.begins_with("--gallery"):
+			var gl: Node = load("res://scripts/debug/gallery.gd").new()
+			gl.main = self
+			add_child(gl)
+			return
 		if a == "--smoke":
 			var sm: Node = load("res://scripts/debug/smoke.gd").new()
 			sm.main = self
