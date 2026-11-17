@@ -2,7 +2,7 @@
 
 *"Nothing stays buried."*
 
-Et mørkt isometrisk action-RPG om et kongerike som brant ned, og kongen som ble bundet til en forbannet krone.
+Et mørkt isometrisk action-RPG om et kongerike som brant ned, og kongen som ble bundet til en haunted krone.
 
 ## Dokumentasjon
 
