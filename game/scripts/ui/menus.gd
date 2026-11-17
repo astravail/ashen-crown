@@ -176,10 +176,7 @@ func show_title() -> void:
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(fill)
-	var rec := Game.records
 	var foot := "v%s" % Game.VERSION
-	if int(rec.runs) > 0:
-		foot += "     Runs %d  ·  Victories %d" % [rec.runs, rec.wins]
 	v.add_child(_label(foot, Game.font_body, 18, Color(0.5, 0.47, 0.44)))
 	_focus_first(first)
 
@@ -1116,7 +1113,7 @@ func show_statistics() -> void:
 			var right := VBoxContainer.new()
 			right.add_theme_constant_override("separation", 10)
 			right.add_child(_label("CAREER", Game.font_display, 13, Color(0.6, 0.56, 0.52)))
-			for row in [["Characters created", str(int(rec.runs))], ["Victories", str(int(rec.wins))], ["Fallen heroes", str(int(rec.fallen))], ["Deepest zone", str(int(rec.best_zone))], ["Best hardcore level", str(int(rec.fallen_best_level))]]:
+			for row in [["Fallen heroes", str(int(rec.fallen))], ["Deepest zone", str(int(rec.best_zone))], ["Best hardcore level", str(int(rec.fallen_best_level))]]:
 				var h := HBoxContainer.new()
 				h.add_child(_label(row[0], Game.font_body, 18, Color(0.72, 0.68, 0.64)))
 				var f := Control.new()
