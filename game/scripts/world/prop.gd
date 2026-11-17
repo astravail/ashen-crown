@@ -14,6 +14,8 @@ var rng := RandomNumberGenerator.new()
 var shape := PackedVector2Array()
 var scale_v := 1.0
 var branches: Array = []
+var chest_id := 0
+var door_idx := -1
 
 
 func init() -> void:
@@ -70,6 +72,30 @@ func init() -> void:
 			light = world.make_light(Color(1.0, 0.7, 0.4), 0.7, 300.0)
 			add_child(light)
 			light.position = Vector2(0, -16)
+		"hut":
+			radius = 50.0
+		"stall":
+			radius = 26.0
+		"well":
+			radius = 22.0
+		"barrel", "crate":
+			radius = 12.0
+		"bonfire":
+			radius = 14.0
+			light = world.make_light(Color(1.0, 0.55, 0.25), 1.6, 900.0)
+			add_child(light)
+			light.position = Vector2(0, -20)
+		"chest", "chest_iron", "crown", "door", "gate_seg":
+			radius = 0.0
+			if kind == "crown":
+				light = world.make_light(Color(1.0, 0.7, 0.3), 1.6, 700.0)
+				add_child(light)
+			if kind == "gate_seg":
+				radius = 34.0
+		"waypoint":
+			radius = 0.0
+			light = world.make_light(Color(0.5, 0.8, 1.0), 1.2, 560.0)
+			add_child(light)
 		"altar", "portal", "throne":
 			light = world.make_light(Color(1.0, 0.6, 0.3), 1.6, 900.0)
 			add_child(light)
@@ -121,6 +147,16 @@ func update(dt: float) -> void:
 		world.smoke_fx.emit(global_position + Vector2(36 + sin(t * 0.9 + seed_value) * 3.0, -40), Vector2(0, 30), 0.7, 1.8, Color(0.3, 0.02, 0.02, 0.9), Particles.EMBER, 0.0, 300.0)
 	if kind.begins_with("shrine") and used and light:
 		light.energy = move_toward(light.energy, 0.15, dt)
+	if kind == "bonfire":
+		light.energy = 1.5 + 0.2 * sin(t * 9.0) + 0.12 * sin(t * 23.0)
+		if rng.randf() < dt * 14.0:
+			world.glow_fx.emit(global_position + Vector2(rng.randf_range(-8, 8), -26), Vector2(rng.randf_range(-15, 15), rng.randf_range(-110, -60)), rng.randf_range(0.8, 1.6), rng.randf_range(1.5, 3.2), Color(3.0, 1.2, 0.35), Particles.EMBER, 0.6)
+	if kind == "sigil" and rng.randf() < dt * 20.0:
+		var a6 := rng.randf() * TAU
+		world.glow_fx.emit(global_position + Vector2(cos(a6), sin(a6) * 0.5) * 40.0, Vector2(0, -120), 1.0, 2.4, Color(0.8, 1.8, 3.0), Particles.EMBER, 0.4)
+	if kind == "waypoint" and rng.randf() < dt * 10.0:
+		var a2 := rng.randf() * TAU
+		world.glow_fx.emit(global_position + Vector2(cos(a2), sin(a2) * 0.5) * 46.0, Vector2(0, -70), 1.2, 2.2, Color(0.8, 1.8, 3.0), Particles.EMBER, 0.4)
 	if kind == "portal" and rng.randf() < dt * 30.0:
 		var a := rng.randf() * TAU
 		world.glow_fx.emit(global_position + Vector2(cos(a), sin(a) * 0.5) * 70.0, -Vector2(cos(a), sin(a) * 0.5) * 60.0, 1.0, 3.0, Color(3.0, 1.0, 0.3), Particles.EMBER, 0.5)
@@ -232,6 +268,85 @@ func _draw() -> void:
 			draw_rect(Rect2(-75, -40, 150, 40), Color(0.14, 0.11, 0.1))
 			var spikes := PackedVector2Array([Vector2(-60, -150), Vector2(-48, -200), Vector2(-30, -155), Vector2(0, -215), Vector2(30, -155), Vector2(48, -200), Vector2(60, -150)])
 			draw_colored_polygon(spikes, Color(0.12, 0.09, 0.08))
+		"hut":
+			_shadow(60)
+			draw_rect(Rect2(-50, -62, 100, 62), Color(0.16, 0.12, 0.09))
+			draw_rect(Rect2(-50, -62, 100, 8), Color(0.1, 0.08, 0.06))
+			draw_colored_polygon(PackedVector2Array([Vector2(-64, -58), Vector2(64, -58), Vector2(40, -106), Vector2(-40, -106)]), Color(0.1, 0.07, 0.06))
+			draw_line(Vector2(-64, -58), Vector2(64, -58), Color(0.2, 0.14, 0.1), 3.0)
+			draw_rect(Rect2(-9, -32, 18, 32), Color(0.05, 0.035, 0.03))
+			draw_rect(Rect2(22, -46, 14, 14), Color(0.12, 0.1, 0.08))
+		"stall":
+			_shadow(34)
+			draw_line(Vector2(-26, 0), Vector2(-26, -58), Color(0.15, 0.11, 0.08), 4.0)
+			draw_line(Vector2(26, 0), Vector2(26, -58), Color(0.15, 0.11, 0.08), 4.0)
+			draw_colored_polygon(PackedVector2Array([Vector2(-34, -58), Vector2(34, -58), Vector2(28, -74), Vector2(-28, -74)]), Color(0.38, 0.1, 0.07))
+			draw_rect(Rect2(-28, -24, 56, 10), Color(0.2, 0.15, 0.1))
+			draw_rect(Rect2(-22, -30, 10, 6), Color(0.45, 0.4, 0.34))
+			draw_rect(Rect2(2, -30, 14, 6), Color(0.3, 0.28, 0.3))
+		"well":
+			_shadow(26)
+			draw_set_transform(Vector2(0, -8), 0.0, Vector2(1.0, 0.55))
+			draw_circle(Vector2.ZERO, 22, Color(0.2, 0.19, 0.18), true, -1.0, true)
+			draw_circle(Vector2.ZERO, 15, Color(0.02, 0.03, 0.04), true, -1.0, true)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			draw_line(Vector2(-18, -10), Vector2(-18, -44), Color(0.15, 0.11, 0.08), 3.0)
+			draw_line(Vector2(18, -10), Vector2(18, -44), Color(0.15, 0.11, 0.08), 3.0)
+			draw_line(Vector2(-22, -44), Vector2(22, -44), Color(0.15, 0.11, 0.08), 3.0)
+		"barrel":
+			_shadow(14)
+			draw_rect(Rect2(-10, -24, 20, 24), Color(0.2, 0.14, 0.09))
+			draw_line(Vector2(-10, -17), Vector2(10, -17), Color(0.1, 0.09, 0.08), 2.0)
+			draw_line(Vector2(-10, -7), Vector2(10, -7), Color(0.1, 0.09, 0.08), 2.0)
+		"crate":
+			_shadow(16)
+			draw_rect(Rect2(-12, -22, 24, 22), Color(0.22, 0.17, 0.11))
+			draw_rect(Rect2(-12, -22, 24, 22), Color(0.1, 0.08, 0.06), false, 2.0)
+			draw_line(Vector2(-12, -22), Vector2(12, 0), Color(0.1, 0.08, 0.06), 2.0)
+		"bonfire":
+			_shadow(26)
+			for i in 5:
+				var a3 := TAU * i / 5.0
+				draw_line(Vector2(cos(a3), sin(a3) * 0.5) * 18, Vector2(0, -8), Color(0.14, 0.1, 0.07), 5.0, true)
+		"chest", "chest_iron":
+			_shadow(20)
+			var wood := Color(0.24, 0.16, 0.1) if kind == "chest" else Color(0.16, 0.15, 0.16)
+			var band := Color(0.5, 0.4, 0.2) if kind == "chest" else Color(0.5, 0.2, 0.12)
+			draw_rect(Rect2(-18, -20, 36, 20), wood)
+			draw_rect(Rect2(-18, -20, 36, 4), wood.lightened(0.1))
+			if used:
+				draw_colored_polygon(PackedVector2Array([Vector2(-18, -20), Vector2(18, -20), Vector2(14, -38), Vector2(-14, -38)]), wood.darkened(0.2))
+				draw_rect(Rect2(-14, -20, 28, 4), Color(0.02, 0.015, 0.015))
+			else:
+				draw_rect(Rect2(-18, -32, 36, 12), wood.lightened(0.05))
+				draw_arc(Vector2(0, -32), 18.0, PI, TAU, 14, wood.lightened(0.05), 2.0, true)
+				draw_rect(Rect2(-3, -24, 6, 7), band)
+			draw_line(Vector2(-12, -20), Vector2(-12, 0), band, 2.0)
+			draw_line(Vector2(12, -20), Vector2(12, 0), band, 2.0)
+		"waypoint":
+			_shadow(46)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
+			draw_circle(Vector2.ZERO, 46, Color(0.12, 0.13, 0.15), true, -1.0, true)
+			draw_arc(Vector2.ZERO, 40, 0.0, TAU, 32, Color(0.3, 0.35, 0.42), 3.0, true)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			for i in 4:
+				var a4 := TAU * i / 4.0 + PI / 4.0
+				var bp := Vector2(cos(a4) * 38, sin(a4) * 19)
+				draw_rect(Rect2(bp + Vector2(-5, -30), Vector2(10, 30)), Color(0.18, 0.18, 0.2))
+		"door":
+			_shadow(30)
+			draw_rect(Rect2(-24, -64, 48, 64), Color(0.1, 0.08, 0.07))
+			draw_rect(Rect2(-18, -56, 36, 56), Color(0.03, 0.025, 0.02))
+			draw_arc(Vector2(0, -56), 18.0, PI, TAU, 14, Color(0.18, 0.14, 0.1), 5.0, true)
+		"gate_seg":
+			_shadow(38)
+			draw_rect(Rect2(-30, -90, 60, 90), Color(0.08, 0.07, 0.07))
+			draw_rect(Rect2(-30, -90, 60, 10), Color(0.2, 0.17, 0.15))
+			for i in 4:
+				draw_line(Vector2(-22 + i * 14, -80), Vector2(-22 + i * 14, -6), Color(0.15, 0.14, 0.15), 3.0)
+		"crown":
+			_shadow(30)
+			draw_rect(Rect2(-26, -22, 52, 22), Color(0.14, 0.11, 0.1))
 		"altar":
 			_shadow(50)
 			draw_rect(Rect2(-46, -34, 92, 34), Color(0.2, 0.18, 0.17))
@@ -373,6 +488,23 @@ func _draw_glow() -> void:
 				var a := t * (1.2 + i * 0.4) + i
 				glow.draw_arc(Vector2.ZERO, 70 - i * 13, a, a + PI * 1.3, 40, Color(3.0, 1.0 + i * 0.3, 0.25, 0.7), 4.0, true)
 			glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		"crown":
+			if not used:
+				_crown_shard(Vector2(0, -50.0 + sin(t * 2.0) * 5.0), 1.3)
+		"door":
+			glow.draw_rect(Rect2(-14, -50, 28, 50), Color(0.8, 0.45, 0.15, 0.15 + 0.05 * sin(t * 3.0)))
+		"waypoint":
+			var pulse2 := 0.7 + 0.3 * sin(t * 2.5)
+			glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
+			glow.draw_arc(Vector2.ZERO, 30, t, t + PI * 1.4, 24, Color(0.8, 1.8, 3.0, pulse2), 3.0, true)
+			glow.draw_arc(Vector2.ZERO, 18, -t * 1.3, -t * 1.3 + PI, 18, Color(1.0, 2.0, 3.0, pulse2), 2.5, true)
+			glow.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			for i in 4:
+				var a5 := TAU * i / 4.0 + PI / 4.0
+				glow.draw_circle(Vector2(cos(a5) * 38, sin(a5) * 19 - 32), 3.0, Color(0.9, 2.0, 3.0, pulse2), true, -1.0, true)
+		"hut":
+			glow.draw_rect(Rect2(22, -46, 14, 14), Color(2.4, 1.2, 0.4, 0.85))
+			glow.draw_circle(Vector2(29, -39), 26, Color(1.6, 0.7, 0.2, 0.09), true, -1.0, true)
 		"candles":
 			for i in 4:
 				var cp := Vector2((i - 1.5) * 9.0, (i % 2) * 5.0)

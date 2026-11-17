@@ -11,9 +11,14 @@ var t := 0.0
 var _hp_trail := 1.0
 
 
+var _map_rect := Rect2()
+var _map_scale := 1.0
+
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
 func show_banner(title: String, sub: String) -> void:
@@ -28,8 +33,10 @@ func _process(dt: float) -> void:
 	if world and world.player:
 		var r := world.player.hp / world.player.max_hp
 		_hp_trail = r if r > _hp_trail else move_toward(_hp_trail, r, dt * 0.35)
-	if Input.is_action_just_pressed("map") and not get_tree().paused:
+	# The big map pauses the game so you can place markers in peace.
+	if Input.is_action_just_pressed("map") and (not get_tree().paused or big_map):
 		big_map = not big_map
+		get_tree().paused = big_map
 	queue_redraw()
 
 
@@ -47,6 +54,10 @@ func _draw() -> void:
 	_draw_boss(vs)
 	_draw_banner(vs)
 	_draw_left(p)
+	_draw_tracker(vs)
+	_draw_guide_arrow(vs)
+	_draw_prompt(vs)
+	_draw_recall(vs)
 
 
 # ---------------------------------------------------------------- pieces
@@ -158,7 +169,7 @@ func _draw_bottom(vs: Vector2, p: Player) -> void:
 	# Flask
 	var fx := hp_c.x + orb_r + 46.0
 	var fy := vs.y - 86.0
-	_small_slot(Vector2(fx, fy), "flask", p.flask, p.flask_max(), Game.key_label("flask"), Color(0.85, 0.2, 0.15))
+	_small_slot(Vector2(fx, fy), "flask", -1, -1, Game.key_label("flask"), Color(0.85, 0.2, 0.15), clampf(Game.potion_cd / p.potion_cooldown(), 0.0, 1.0), ceili(Game.potion_cd))
 	_small_slot(Vector2(fx + 56.0, fy), "dodge", -1, -1, Game.key_label("dodge"), Color(0.8, 0.75, 0.7), p.dodge_cd / (2.0 if p.frag("hollow") else 1.0))
 
 	# Ash meter
@@ -229,6 +240,10 @@ func _slot(r: Rect2, i: int, p: Player) -> void:
 
 
 func _sweep(r: Rect2, k: float) -> void:
+	if k <= 0.002 or k >= 0.998:
+		if k >= 0.998:
+			draw_rect(r, Color(0, 0, 0, 0.62))
+		return
 	var c := r.get_center()
 	var pts := PackedVector2Array([c])
 	var n := 32
@@ -242,7 +257,7 @@ func _sweep(r: Rect2, k: float) -> void:
 	draw_colored_polygon(pts, Color(0, 0, 0, 0.62))
 
 
-func _small_slot(c: Vector2, id: String, charges: int, max_charges: int, key: String, col: Color, cd := 0.0) -> void:
+func _small_slot(c: Vector2, id: String, charges: int, max_charges: int, key: String, col: Color, cd := 0.0, secs := 0) -> void:
 	var r := Rect2(c - Vector2(22, 22), Vector2(44, 44))
 	draw_rect(r.grow(2), Color(0.02, 0.018, 0.018))
 	draw_rect(r, Color(0.1, 0.085, 0.08))
@@ -251,6 +266,8 @@ func _small_slot(c: Vector2, id: String, charges: int, max_charges: int, key: St
 	Icons.draw(self, id, c, 40.0, col if on else Color(0.4, 0.37, 0.35))
 	if cd > 0.0:
 		_sweep(r, clampf(cd, 0.0, 1.0))
+		if secs > 0:
+			_center_text(c.x, c.y + 8, "%d" % secs, 20, Color(1, 1, 1, 0.95), Game.font_display_bold, 4)
 	if max_charges > 0:
 		_text(r.position + Vector2(r.size.x - 12, r.size.y - 4), str(charges), 15, Color(1, 0.9, 0.8), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 3)
 	_center_text(c.x, r.end.y + 16, key, 12, Color(0.7, 0.65, 0.6), Game.font_display_bold)
@@ -274,8 +291,26 @@ func _draw_left(p: Player) -> void:
 	var y := 44.0
 	_text(Vector2(x, y), "LEVEL %d" % p.level, 18, Color(0.9, 0.85, 0.78), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 26
-	_text(Vector2(x, y), p.data.name, 16, Color(0.65, 0.6, 0.56), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
-	y += 30
+	_text(Vector2(x, y), "%s  ·  %s" % [Game.hero_name, p.data.name], 16, Color(0.65, 0.6, 0.56), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+	y += 22
+	if Game.hardcore:
+		_text(Vector2(x, y), "HARDCORE", 14, Color(0.9, 0.35, 0.25), Game.font_display_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+		y += 20
+	_text(Vector2(x, y), Game.diff().name, 14, Color(1.0, 0.75, 0.45), Game.font_display, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+	y += 4
+	_text(Vector2(x, y), "%d gold" % Game.gold, 17, Color(1.0, 0.85, 0.3), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+	y += 24
+	if p.pending_levels > 0:
+		_text(Vector2(x, y), "%d skill point%s  ·  K" % [p.pending_levels, "" if p.pending_levels == 1 else "s"], 16, Color(0.6, 0.9, 0.6), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+		y += 22
+	var broken := 0
+	for s in Game.equipment.keys():
+		if Items.is_broken(Game.equipment[s]):
+			broken += 1
+	if broken > 0:
+		_text(Vector2(x, y), "%d item%s broken. Find the smith." % [broken, "" if broken == 1 else "s"], 16, Color(0.9, 0.3, 0.25), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+		y += 22
+	y += 8
 	for f in Game.fragments:
 		for d in Data.FRAGMENTS:
 			if d.id == f:
@@ -316,7 +351,7 @@ func _markers(r: Rect2, src: Rect2, scale: float) -> void:
 	var to_screen := func(world_pos: Vector2) -> Vector2:
 		return r.position + (world_pos / World.CELL - src.position) * scale
 	# Objective marker, clamped to the frame
-	var goal: Vector2 = to_screen.call(world.arena_center)
+	var goal: Vector2 = to_screen.call(world.objective_pos)
 	var inside := r.grow(-8).has_point(goal)
 	goal = Vector2(clampf(goal.x, r.position.x + 8, r.end.x - 8), clampf(goal.y, r.position.y + 8, r.end.y - 8))
 	var gc := Color(1.0, 0.55, 0.2, 0.75 + 0.25 * sin(t * 4.0))
@@ -327,7 +362,7 @@ func _markers(r: Rect2, src: Rect2, scale: float) -> void:
 	for p in world.interactives:
 		if p.kind.begins_with("shrine") and not p.used:
 			var q: Vector2 = to_screen.call(p.global_position)
-			if r.has_point(q) and world.minimap_img.get_pixel(int(p.global_position.x / World.CELL), int(p.global_position.y / World.CELL)).a > 0.0:
+			if r.has_point(q) and world.is_explored(Vector2i(p.global_position / World.CELL)):
 				draw_circle(q, 4.0, Color(0.6, 0.85, 1.0), true, -1.0, true)
 	for e in world.enemies:
 		if e.dead or e.sleeping and not e.is_champion:
@@ -335,6 +370,15 @@ func _markers(r: Rect2, src: Rect2, scale: float) -> void:
 		var q2: Vector2 = to_screen.call(e.global_position)
 		if r.has_point(q2):
 			draw_circle(q2, 2.5 if not e.elite else 4.0, Color(0.9, 0.25, 0.15) if not e.elite else Color(1.0, 0.6, 0.2), true, -1.0, true)
+	for mk in Game.markers:
+		var mp: Vector2 = to_screen.call(mk)
+		var mc := Color(0.6, 0.95, 1.4)
+		var inside_m := r.grow(-6).has_point(mp)
+		mp = Vector2(clampf(mp.x, r.position.x + 6, r.end.x - 6), clampf(mp.y, r.position.y + 6, r.end.y - 6))
+		draw_line(mp, mp + Vector2(0, -16), mc, 2.0)
+		draw_colored_polygon(PackedVector2Array([mp + Vector2(0, -16), mp + Vector2(10, -12), mp + Vector2(0, -8)]), mc)
+		if not inside_m:
+			draw_circle(mp, 3.0, mc, true, -1.0, true)
 	var pp: Vector2 = to_screen.call(world.player.global_position)
 	var d := world.player.aim_dir
 	draw_colored_polygon(PackedVector2Array([pp + d * 8.0, pp + d.rotated(2.5) * 6.0, pp + d.rotated(-2.5) * 6.0]), Color(1, 0.95, 0.85))
@@ -349,7 +393,15 @@ func _draw_big_map(vs: Vector2) -> void:
 	draw_texture_rect(world.minimap_tex, r, false, Color(1, 1, 1, 0.9))
 	var src := Rect2(0, 0, m.w, m.h)
 	_markers(r, src, scale)
+	_map_rect = r
+	_map_scale = scale
+	for reg in world.map.regions:
+		var cp: Vector2 = r.position + (Vector2(reg.off) + Vector2(reg.w, reg.h) * 0.5) * scale
+		var known: bool = reg.zone < 0 or bool(Game.zs(reg.zone).visited)
+		var nm: String = (reg.zd.name if known else "?")
+		_center_text(cp.x, cp.y, nm.to_upper(), 13, Color(0.9, 0.8, 0.65, 0.85) if known else Color(0.5, 0.47, 0.44, 0.6), Game.font_display, 3)
 	_center_text(vs.x * 0.5, r.position.y - 24, String(world.zone.name).to_upper(), 26, Color(0.9, 0.85, 0.78), Game.font_display_bold, 4)
+	_center_text(vs.x * 0.5, r.end.y + 26, "Click  ·  place marker      Right click  ·  remove      Tab  ·  close", 16, Color(0.7, 0.65, 0.6), Game.font_body)
 
 
 func _draw_boss(vs: Vector2) -> void:
@@ -381,3 +433,110 @@ func _draw_banner(vs: Vector2) -> void:
 	draw_line(Vector2(cx - lw, y + 14), Vector2(cx + lw, y + 14), Color(0.9, 0.5, 0.2, 0.7 * a), 1.0)
 	if banner_sub != "":
 		_center_text(cx, y + 42, banner_sub, 22, Color(0.85, 0.8, 0.75, a), Game.font_italic, 4)
+
+
+func _draw_tracker(vs: Vector2) -> void:
+	if big_map:
+		return
+	var x := vs.x - 280.0
+	var y := 330.0
+	var n := 0
+	for q in Data.QUESTS:
+		var st := Game.quest_status(q.id)
+		if st != 1 and st != 2:
+			continue
+		if n >= 4:
+			break
+		n += 1
+		var p: int = int((Game.quests.get(q.id, {"p": 0}) as Dictionary).p)
+		var col := Color(0.95, 0.75, 0.4) if st == 1 else Color(0.5, 0.9, 0.45)
+		if n == 1:
+			_text(Vector2(x, y), "QUESTS", 13, Color(0.6, 0.56, 0.52), Game.font_display)
+			y += 20
+		_text(Vector2(x, y), String(q.title), 17, col, Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, 260.0, 3)
+		y += 20
+		var line := ("%d / %d" % [p, int(q.goal)]) if st == 1 else "Return to the Elder"
+		_text(Vector2(x, y), line, 15, Color(0.78, 0.74, 0.7), Game.font_body, HORIZONTAL_ALIGNMENT_LEFT, 260.0, 3)
+		y += 26
+
+
+func _draw_prompt(vs: Vector2) -> void:
+	if world.interact_target == null or world.interact_text == "":
+		return
+	var key := "G" if not Game.using_gamepad else "B"
+	var txt := "[%s]  %s" % [key, world.interact_text]
+	var w := Game.font_display_bold.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+	var y := vs.y - 230.0
+	draw_rect(Rect2(vs.x * 0.5 - w * 0.5 - 18, y - 28, w + 36, 40), Color(0, 0, 0, 0.6))
+	draw_rect(Rect2(vs.x * 0.5 - w * 0.5 - 18, y - 28, w + 36, 40), Color(0.6, 0.4, 0.2, 0.8), false, 1.0)
+	_center_text(vs.x * 0.5, y, txt, 24, Color(1.0, 0.85, 0.6), Game.font_display_bold)
+
+
+func _draw_recall(vs: Vector2) -> void:
+	if world.recall_t <= 0.0:
+		return
+	var c := Vector2(vs.x * 0.5, vs.y * 0.62)
+	var k := 1.0 - world.recall_t / 3.0
+	draw_arc(c, 34.0, -PI / 2, -PI / 2 + TAU * k, 40, Color(0.6, 0.9, 1.4), 5.0, true)
+	draw_arc(c, 34.0, 0, TAU, 40, Color(0.6, 0.9, 1.4, 0.2), 2.0, true)
+	_center_text(c.x, c.y + 62, "Recalling to Cinderfall…  %.1f" % world.recall_t, 20, Color(0.8, 0.95, 1.0), Game.font_display)
+
+
+func _draw_beta(vs: Vector2) -> void:
+	_text(Vector2(14, vs.y - 12), Game.beta_label(), 13, Color(0.5, 0.47, 0.44, 0.8), Game.font_display)
+
+
+func close_map() -> void:
+	big_map = false
+	get_tree().paused = false
+
+
+## Left click on the big map sets a marker (the guide then leads there); right click removes the nearest.
+func _unhandled_input(event: InputEvent) -> void:
+	if not big_map or not (event is InputEventMouseButton) or not event.pressed:
+		return
+	var p: Vector2 = event.position
+	if not _map_rect.has_point(p):
+		return
+	var wp := (p - _map_rect.position) / _map_scale * World.CELL
+	if event.button_index == MOUSE_BUTTON_LEFT:
+		if Game.markers.size() >= Game.MAX_MARKERS:
+			Game.markers.pop_front()
+		Game.markers.append(wp)
+		Sfx.play("ui_select", -6.0)
+		world.guide_pts = PackedVector2Array()
+		world._guide_t = 0.0
+	elif event.button_index == MOUSE_BUTTON_RIGHT:
+		var best := -1
+		var bd := 30.0
+		for i in Game.markers.size():
+			var d: float = ((Game.markers[i] / World.CELL) * _map_scale + _map_rect.position).distance_to(p)
+			if d < bd:
+				bd = d
+				best = i
+		if best >= 0:
+			Game.markers.remove_at(best)
+			world.guide_pts = PackedVector2Array()
+			world._guide_t = 0.0
+	get_viewport().set_input_as_handled()
+
+
+func _draw_guide_arrow(vs: Vector2) -> void:
+	if big_map or world.player == null:
+		return
+	var target := world.guide_target()
+	if target == Vector2.ZERO:
+		return
+	var to := target - world.player.global_position
+	var dist := to.length()
+	if dist < 600.0:
+		return
+	var c := vs * 0.5
+	var dir := to.normalized()
+	var radius := minf(vs.x, vs.y) * 0.5 - 150.0
+	var pos := c + dir * radius
+	var col := Color(0.6, 0.9, 1.0) if world.guide_is_marker() else Color(1.0, 0.8, 0.45)
+	var side := Vector2(-dir.y, dir.x)
+	draw_colored_polygon(PackedVector2Array([pos + dir * 16.0, pos - dir * 10.0 + side * 12.0, pos - dir * 4.0, pos - dir * 10.0 - side * 12.0]), Color(col.r, col.g, col.b, 0.85))
+	var label := "%d m" % int(dist / 64.0 * 1.6)
+	_center_text(pos.x - dir.x * 34.0, pos.y - dir.y * 34.0 + 6.0, label, 15, Color(col.r, col.g, col.b, 0.9), Game.font_body_bold, 3)

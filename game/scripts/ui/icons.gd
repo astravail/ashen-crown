@@ -92,3 +92,41 @@ static func crown(ci: CanvasItem, c: Vector2, s: float, col: Color, crack: Color
 	ci.draw_polyline(pts + PackedVector2Array([pts[0]]), col, maxf(1.5, s * 0.04), true)
 	ci.draw_rect(Rect2(c + Vector2(-0.5, 0.32) * s, Vector2(1.0, 0.1) * s), col)
 	ci.draw_polyline(PackedVector2Array([c + Vector2(0, -0.46) * s, c + Vector2(-0.07, -0.1) * s, c + Vector2(0.06, 0.06) * s, c + Vector2(-0.03, 0.32) * s]), crack, maxf(1.5, s * 0.03), true)
+
+
+## Gear glyphs for inventory slots and ground loot.
+static func item(ci: CanvasItem, id: String, c: Vector2, s: float, col: Color) -> void:
+	var w := maxf(2.0, s * 0.09)
+	var dim := Color(col.r, col.g, col.b, col.a * 0.55)
+	match id:
+		"blade":
+			ci.draw_line(c + Vector2(-0.28, 0.34) * s, c + Vector2(0.3, -0.34) * s, col, w * 1.6, true)
+			ci.draw_line(c + Vector2(-0.2, 0.06) * s, c + Vector2(-0.02, 0.24) * s, dim, w * 1.4, true)
+		"mace":
+			ci.draw_line(c + Vector2(-0.3, 0.34) * s, c + Vector2(0.14, -0.14) * s, dim, w * 1.4, true)
+			ci.draw_circle(c + Vector2(0.2, -0.2) * s, s * 0.17, col, true, -1.0, true)
+		"staff":
+			ci.draw_line(c + Vector2(-0.18, 0.38) * s, c + Vector2(0.18, -0.3) * s, dim, w * 1.3, true)
+			ci.draw_circle(c + Vector2(0.2, -0.34) * s, s * 0.11, col, true, -1.0, true)
+		"wand":
+			ci.draw_line(c + Vector2(-0.3, 0.3) * s, c + Vector2(0.24, -0.24) * s, dim, w, true)
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0.3, -0.3) * s, c + Vector2(0.14, -0.22) * s, c + Vector2(0.22, -0.14) * s]), col)
+		"scepter":
+			ci.draw_line(c + Vector2(-0.26, 0.34) * s, c + Vector2(0.16, -0.18) * s, dim, w * 1.3, true)
+			ci.draw_arc(c + Vector2(0.22, -0.26) * s, s * 0.14, 0, TAU, 14, col, w, true)
+		"helm":
+			ci.draw_arc(c + Vector2(0, 0.04) * s, s * 0.28, PI, TAU, 18, col, w * 1.6, true)
+			ci.draw_rect(Rect2(c + Vector2(-0.28, 0.04) * s, Vector2(0.56, 0.22) * s), dim)
+		"chest":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.3, -0.28) * s, c + Vector2(0.3, -0.28) * s, c + Vector2(0.22, 0.3) * s, c + Vector2(-0.22, 0.3) * s]), col)
+			ci.draw_line(c + Vector2(0, -0.28) * s, c + Vector2(0, 0.3) * s, Color(0, 0, 0, 0.45), w * 0.8)
+		"boots":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.16, -0.3) * s, c + Vector2(0.06, -0.3) * s, c + Vector2(0.06, 0.1) * s, c + Vector2(0.3, 0.22) * s, c + Vector2(-0.16, 0.26) * s]), col)
+		"ring":
+			ci.draw_arc(c + Vector2(0, 0.06) * s, s * 0.22, 0, TAU, 20, col, w * 1.5, true)
+			ci.draw_circle(c + Vector2(0, -0.2) * s, s * 0.08, dim, true, -1.0, true)
+		"amulet":
+			ci.draw_arc(c + Vector2(0, -0.1) * s, s * 0.26, 0.2, PI - 0.2, 16, dim, w, true)
+			ci.draw_circle(c + Vector2(0, 0.2) * s, s * 0.13, col, true, -1.0, true)
+		_:
+			ci.draw_circle(c, s * 0.2, col, true, -1.0, true)

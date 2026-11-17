@@ -5,13 +5,20 @@ extends Node2D
 signal player_died
 signal level_up
 signal fragment_ready
-signal zone_exit
 signal boss_started
 signal boss_defeated
 signal banner(title: String, sub: String)
+signal npc_talk(kind: String)
+signal waypoint_open
+signal crown_taken
+signal door_enter(interior_idx: int)
+signal door_exit
+signal recall_done
+signal act_entered(act: int)
 
 const CELL := 64.0
-const ACTIVATE_DIST := 900.0
+const ACTIVATE_DIST := 430.0
+const INTERACT_KINDS := ["chest", "chest_iron", "waypoint", "crown", "door"]
 const UPDATE_DIST := 2000.0
 
 static var unshaded_add: CanvasItemMaterial
@@ -20,7 +27,30 @@ static var light_tex: Texture2D
 
 var zone: Dictionary
 var zone_idx := 0
-var map: MapGen
+var map: WorldMap
+var rt: Array[Dictionary] = []  # runtime state per region
+var cur := -1
+var village := false
+var interior := false
+var npcs: Array[Npc] = []
+var loots: Array[Loot] = []
+var ambush: Array[Dictionary] = []
+var interact_target: Node
+var interact_text := ""
+var full_warn := 0.0
+var recall_t := 0.0
+var recall_cd := 0.0
+var recall_prop: Prop
+var objective_pos := Vector2.ZERO
+var guide_pts := PackedVector2Array()
+var _astar: AStarGrid2D
+var _guide_t := 0.0
+var guide_node: Node2D
+var explored := PackedByteArray()
+var _region_timer := 0.0
+var _target_mod := Color.WHITE
+var _lowhp_t := 0.0
+var _near_arena_msg := {}
 var player: Player
 var enemies: Array[Enemy] = []
 var minions: Array[Minion] = []
@@ -99,28 +129,44 @@ func make_light(color: Color, energy: float, size_px: float) -> PointLight2D:
 
 # ================================================================ setup
 
-func setup(idx: int, is_attract := false) -> void:
-	zone_idx = idx
-	zone = Data.ZONES[idx]
+func setup(idx: int, is_attract := false, opts := {}) -> void:
 	attract = is_attract
-	map = MapGen.new()
-	map.generate(zone, randi() if not is_attract else 4242)
-	_build_layers()
-	_build_props()
+	interior = idx >= Data.LAST_ZONE + 1
+	map = WorldMap.new()
 	if attract:
-		camera.global_position = _cell_pos(map.nodes[1])
+		map.build_single(0, 4242)
+	elif interior:
+		map.build_single(idx, int(hash(Data.ZONES[idx].id)))
+	else:
+		map.build_overworld(int(opts.get("seed", randi())))
+	zone = map.regions[0].zd
+	zone_idx = map.regions[0].zone
+	for r in map.regions:
+		rt.append({"active": false, "left_at": 0.0, "enemies": [], "champion": null, "boss": null, "state": "explore",
+			"arena_center": (Vector2(r.finish) + Vector2(0.5, 0.5)) * CELL, "gates": [], "waypoint": null, "props": []})
+	_build_layers()
+	if attract:
+		_build_props(0)
+		camera.global_position = _cell_pos(map.regions[0].nodes[1])
 		return
-	_spawn_packs()
-	_place_shrines()
-	_place_finale()
 	player = Player.new()
 	player.world = self
 	player.setup(Game.class_id)
 	entity_layer.add_child(player)
-	player.global_position = _cell_pos(map.start)
+	var start_pos: Vector2
+	if opts.has("pos"):
+		start_pos = opts.pos
+	elif interior:
+		start_pos = _cell_pos(map.regions[0].start) + Vector2(0, 40)
+	else:
+		start_pos = map.regions[0].pois.start
+	player.global_position = start_pos
 	camera.global_position = player.global_position
 	camera.reset_smoothing()
-	_set_objective()
+	if interior:
+		_enter_region(0)
+	else:
+		_enter_region(map.region_at(int(start_pos.x / CELL), int(start_pos.y / CELL)))
 	_reveal()
 
 
@@ -131,62 +177,77 @@ func _cell_pos(c: Vector2i) -> Vector2:
 func _build_layers() -> void:
 	var size_px := Vector2(map.w, map.h) * CELL
 	canvas_mod = CanvasModulate.new()
-	canvas_mod.color = zone.modulate
+	canvas_mod.color = map.regions[0].zd.modulate
+	_target_mod = canvas_mod.color
 	add_child(canvas_mod)
 
 	var mask := ImageTexture.create_from_image(map.mask_image())
-	var gm := ShaderMaterial.new()
-	gm.shader = load("res://shaders/ground.gdshader")
-	gm.set_shader_parameter("mask", mask)
-	gm.set_shader_parameter("col_a", zone.ground_a)
-	gm.set_shader_parameter("col_b", zone.ground_b)
-	gm.set_shader_parameter("col_wall", zone.wall)
-	gm.set_shader_parameter("pattern", zone.pattern)
-	gm.set_shader_parameter("map_px", size_px)
-	var vm := ShaderMaterial.new()
-	vm.shader = load("res://shaders/veins.gdshader")
-	var vc: Color = zone.vein
-	var hdr := maxf(vc.r, maxf(vc.g, vc.b))
-	vm.set_shader_parameter("mask", mask)
-	vm.set_shader_parameter("vein", Color(vc.r / hdr, vc.g / hdr, vc.b / hdr))
-	vm.set_shader_parameter("vein_hdr", hdr)
-	vm.set_shader_parameter("amount", zone.vein_amt)
-	vm.set_shader_parameter("pattern", zone.pattern)
-	vm.set_shader_parameter("map_px", size_px)
+	var gmats: Array[ShaderMaterial] = []
+	var vmats: Array[ShaderMaterial] = []
+	for r in map.regions:
+		var zd: Dictionary = r.zd
+		var gm := ShaderMaterial.new()
+		gm.shader = load("res://shaders/ground.gdshader")
+		gm.set_shader_parameter("mask", mask)
+		gm.set_shader_parameter("col_a", zd.ground_a)
+		gm.set_shader_parameter("col_b", zd.ground_b)
+		gm.set_shader_parameter("col_wall", zd.wall)
+		gm.set_shader_parameter("pattern", zd.pattern)
+		gm.set_shader_parameter("map_px", size_px)
+		var vm := ShaderMaterial.new()
+		vm.shader = load("res://shaders/veins.gdshader")
+		var vc: Color = zd.vein
+		var hdr := maxf(vc.r, maxf(vc.g, vc.b))
+		vm.set_shader_parameter("mask", mask)
+		vm.set_shader_parameter("vein", Color(vc.r / hdr, vc.g / hdr, vc.b / hdr))
+		vm.set_shader_parameter("vein_hdr", hdr)
+		vm.set_shader_parameter("amount", zd.vein_amt)
+		vm.set_shader_parameter("pattern", zd.pattern)
+		vm.set_shader_parameter("map_px", size_px)
+		gmats.append(gm)
+		vmats.append(vm)
 	# The ground is split into chunks: 2D lights only reach a limited number of lights per canvas item.
-	var chunk := 768.0
+	# Chunks with no floor are skipped, which matters on a map this big.
 	ground = ColorRect.new()
 	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(ground)
 	veins = ColorRect.new()
 	veins.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(veins)
-	var cy := 0.0
-	while cy < size_px.y:
-		var cx := 0.0
-		while cx < size_px.x:
+	var cells := 12
+	for cy in range(0, map.h, cells):
+		for cx in range(0, map.w, cells):
+			var ri := -1
+			for y in range(cy, mini(map.h, cy + cells)):
+				for x in range(cx, mini(map.w, cx + cells)):
+					if map.is_floor(x, y):
+						ri = map.region_at(x, y)
+						break
+				if ri >= 0:
+					break
+			if ri < 0:
+				continue
 			var g := ColorRect.new()
-			g.position = Vector2(cx, cy)
-			g.size = Vector2(minf(chunk, size_px.x - cx), minf(chunk, size_px.y - cy))
+			g.position = Vector2(cx, cy) * CELL
+			g.size = Vector2(mini(cells, map.w - cx), mini(cells, map.h - cy)) * CELL
 			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			g.material = gm
+			g.material = gmats[ri]
 			ground.add_child(g)
 			var v := ColorRect.new()
 			v.position = g.position
 			v.size = g.size
 			v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			v.material = vm
+			v.material = vmats[ri]
 			veins.add_child(v)
-			cx += chunk
-		cy += chunk
 
 	decals = Decals.new()
 	decals.world = self
 	add_child(decals)
 
+	var q: float = Game.quality_factor()
 	smoke_fx = Particles.new()
 	smoke_fx.setup(false)
-	smoke_fx.max_count = 3200
+	smoke_fx.max_count = int(3200 * maxf(0.25, q))
 	smoke_fx.z_index = 2
 	glow_fx = Particles.new()
 	glow_fx.setup(true)
@@ -198,6 +259,11 @@ func _build_layers() -> void:
 	add_child(smoke_fx)
 	add_child(glow_fx)
 
+	guide_node = Node2D.new()
+	guide_node.material = unshaded_add
+	guide_node.z_index = 3
+	guide_node.draw.connect(_draw_guide)
+	add_child(guide_node)
 	texts = FloatText.new()
 	texts.z_index = 10
 	texts.material = unshaded
@@ -211,16 +277,24 @@ func _build_layers() -> void:
 	camera.make_current()
 	_build_ambient()
 
+	# Show the outline of the whole map from the start; explored ground fills in as you walk.
 	minimap_img = Image.create(map.w, map.h, false, Image.FORMAT_RGBA8)
 	minimap_img.fill(Color(0, 0, 0, 0))
+	for y in range(1, map.h - 1):
+		for x in range(1, map.w - 1):
+			if map.is_floor(x, y):
+				continue
+			if map.is_floor(x + 1, y) or map.is_floor(x - 1, y) or map.is_floor(x, y + 1) or map.is_floor(x, y - 1):
+				minimap_img.set_pixel(x, y, Color(0.85, 0.65, 0.45, 0.32))
 	minimap_tex = ImageTexture.create_from_image(minimap_img)
+	explored.resize(map.w * map.h)
 	flow.resize(map.w * map.h)
 	flow_stamp.resize(map.w * map.h)
 
 
 func _build_ambient() -> void:
 	var ash := CPUParticles2D.new()
-	ash.amount = 260
+	ash.amount = int(260 * Game.quality_factor())
 	ash.lifetime = 7.0
 	ash.preprocess = 7.0
 	ash.local_coords = false
@@ -244,7 +318,7 @@ func _build_ambient() -> void:
 	camera.add_child(ash)
 
 	var embers := CPUParticles2D.new()
-	embers.amount = 70
+	embers.amount = int(70 * Game.quality_factor())
 	embers.lifetime = 5.0
 	embers.preprocess = 5.0
 	embers.local_coords = false
@@ -257,7 +331,7 @@ func _build_ambient() -> void:
 	embers.gravity = Vector2(6, -10)
 	embers.scale_amount_min = 1.0
 	embers.scale_amount_max = 2.4
-	var vc: Color = zone.vein
+	var vc: Color = map.regions[0].zd.vein
 	embers.color = Color(vc.r, vc.g, vc.b, 1.0)
 	var ramp2 := Gradient.new()
 	ramp2.offsets = PackedFloat32Array([0.0, 0.2, 0.7, 1.0])
@@ -267,10 +341,14 @@ func _build_ambient() -> void:
 	embers.z_index = 5
 	camera.add_child(embers)
 	_ambient = [ash, embers]
+	ash.visible = Game.quality_factor() > 0.0
+	embers.visible = ash.visible
 
 
-func _build_props() -> void:
-	for d in map.props:
+func _build_props(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var door_cell := Vector2(-9999, -9999)
+	for d in r.props:
 		var p := Prop.new()
 		p.world = self
 		p.kind = d.kind
@@ -279,13 +357,26 @@ func _build_props() -> void:
 		p.global_position = d.pos
 		p.init()
 		props.append(p)
+		rt[ri].props.append(p)
 		if p.radius > 0.0:
-			var c := Vector2i(d.pos / CELL)
-			if not prop_cells.has(c):
-				prop_cells[c] = []
-			prop_cells[c].append(p)
-			if p.radius > 0.0:
-				blocked[c] = true
+			_register_solid(p)
+
+
+func _register_solid(p: Prop) -> void:
+	var c := Vector2i(p.global_position / CELL)
+	if not prop_cells.has(c):
+		prop_cells[c] = []
+	prop_cells[c].append(p)
+	blocked[c] = true
+
+
+func _unregister_solid(p: Prop) -> void:
+	var c := Vector2i(p.global_position / CELL)
+	if prop_cells.has(c):
+		prop_cells[c].erase(p)
+		if prop_cells[c].is_empty():
+			prop_cells.erase(c)
+			blocked.erase(c)
 
 
 func add_prop(kind: String, pos: Vector2) -> Prop:
@@ -301,36 +392,52 @@ func add_prop(kind: String, pos: Vector2) -> Prop:
 	return p
 
 
-func _spawn_packs() -> void:
-	var pool: Dictionary = zone.pool
+func _arch_of(k: String) -> String:
+	return String(Data.enemy_def(k).get("arch", k))
+
+
+func _spawn_packs(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var zd: Dictionary = r.zd
+	var pool: Dictionary = zd.pool
+	if pool.is_empty():
+		return
 	var kinds: Array = pool.keys()
 	var total := 0
 	for k in kinds:
 		total += int(pool[k])
-	var pack_id := 0
-	for c in map.packs:
+	var pack_id := ri * 1000
+	for c in r.packs:
 		pack_id += 1
 		var center: Vector2 = (c + Vector2(0.5, 0.5)) * CELL
 		var main_kind := _weighted(kinds, pool, total)
 		var second := _weighted(kinds, pool, total)
-		var n := randi_range(4, 7)
-		if main_kind == "brute":
+		var n := maxi(2, int(round(randi_range(4, 7) * Data.GRIND.pack_size)))
+		if _arch_of(main_kind) == "brute":
 			n = randi_range(1, 2)
 		var elite := randf() < 0.14
 		for i in n:
 			var kind := main_kind if i < n - 2 or n <= 3 else second
-			if kind == "brute" and i > 1:
-				kind = "husk"
+			if _arch_of(kind) == "brute" and i > 1:
+				kind = _weighted_no_brute(kinds, pool, total)
 			var pos := center + Vector2(randf_range(-110, 110), randf_range(-110, 110))
 			if not is_floor_at(pos):
 				pos = center
-			var e := spawn_enemy(kind, pos, false)
+			var e := spawn_enemy(kind, pos, false, ri)
 			e.pack = pack_id
 		if elite:
-			var ek := main_kind if main_kind != "brute" else "husk"
-			var e2 := spawn_enemy(ek, center, false)
+			var ek := main_kind if _arch_of(main_kind) != "brute" else _weighted_no_brute(kinds, pool, total)
+			var e2 := spawn_enemy(ek, center, false, ri)
 			e2.make_elite()
 			e2.pack = pack_id
+
+
+func _weighted_no_brute(kinds: Array, pool: Dictionary, total: int) -> String:
+	for i in 8:
+		var k := _weighted(kinds, pool, total)
+		if _arch_of(k) != "brute":
+			return k
+	return kinds[0]
 
 
 func _weighted(kinds: Array, pool: Dictionary, total: int) -> String:
@@ -342,69 +449,327 @@ func _weighted(kinds: Array, pool: Dictionary, total: int) -> String:
 	return kinds[0]
 
 
-func _place_shrines() -> void:
+func _place_shrines(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
 	var kinds := ["fury", "warding", "haste"]
 	kinds.shuffle()
-	var spots := map.branches.duplicate()
+	var spots: Array = (r.branches as Array).duplicate()
 	spots.shuffle()
 	var placed := 0
 	for b in spots:
-		if placed >= 3:
+		if placed >= 2:
 			break
 		if not map.is_floor(b.x, b.y):
 			continue
 		var p := add_prop("shrine_" + kinds[placed], _cell_pos(b))
 		p.radius = 0.0
+		rt[ri].props.append(p)
 		placed += 1
 
 
-func _place_finale() -> void:
-	var c := _cell_pos(map.finish)
-	arena_center = c
-	arena_radius = 13.0 * CELL
-	if zone_idx == Data.ZONES.size() - 1:
-		boss = spawn_enemy("ember_king", c + Vector2(0, -140), true)
-		boss.sleeping = true
-		boss.pack = -1
+func _place_finale(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var st: Dictionary = rt[ri]
+	var z: int = r.zone
+	var c: Vector2 = st.arena_center
+	var zs := Game.zs(z)
+	if z == Data.LAST_ZONE:
 		var throne := add_prop("throne", c + Vector2(0, -175))
 		throne.radius = 0.0
 		interactives.erase(throne)
-	else:
-		var ch: Dictionary = zone.champion
-		champion = spawn_enemy(ch.kind, c, true)
-		champion.make_champion(ch.name, ch.scale)
-		champion.pack = 999
-		for i in 6:
-			var a := TAU * i / 6.0
-			var kinds: Array = zone.pool.keys()
-			var k: String = kinds[i % kinds.size()]
-			if k == "brute":
-				k = "husk"
-			var e := spawn_enemy(k, c + Vector2(cos(a), sin(a)) * 180.0, false)
-			e.pack = 999
+		st.props.append(throne)
+		if zs.boss_dead:
+			_place_crown(ri)
+			st.state = "done"
+		else:
+			spawn_quest_boss(ri)
+		return
+	if (r.zd.champion as Dictionary).is_empty():
+		return
+	if zs.champ_dead:
+		if not zs.claimed:
+			var altar := add_prop("altar", c)
+			altar.radius = 0.0
+			st.props.append(altar)
+			st.state = "altar"
+		else:
+			st.state = "portal"
+		return
+	spawn_quest_boss(ri)
+
+
+## Bosses and champions only exist while their quest is active.
+func spawn_quest_boss(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var st: Dictionary = rt[ri]
+	if not st.active or st.champion != null or st.boss != null:
+		return
+	var z: int = r.zone
+	var zs := Game.zs(z)
+	var c: Vector2 = st.arena_center
+	if z == Data.LAST_ZONE:
+		if zs.boss_dead or not Game.quest_active_for("boss", z):
+			return
+		var b := spawn_enemy("ember_king", c + Vector2(0, -140), true, ri)
+		b.sleeping = true
+		b.pack = -1
+		st.boss = b
+		if cur == ri:
+			boss = b
+		return
+	if zs.champ_dead or not Game.quest_active_for("champion", z):
+		return
+	var ch: Dictionary = r.zd.champion
+	var e := spawn_enemy(ch.kind, c, true, ri)
+	e.make_champion(ch.name, ch.scale)
+	e.pack = 999
+	st.champion = e
+	if cur == ri:
+		champion = e
+	var kinds: Array = (r.zd.pool as Dictionary).keys()
+	for i in 6:
+		var a := TAU * i / 6.0
+		var k: String = kinds[i % kinds.size()]
+		if _arch_of(k) == "brute":
+			k = kinds[0]
+		var g := spawn_enemy(k, c + Vector2(cos(a), sin(a)) * 180.0, false, ri)
+		g.pack = 999
+
+
+func _place_crown(ri: int) -> void:
+	var st: Dictionary = rt[ri]
+	var crown := add_prop("crown", st.arena_center + Vector2(0, -120))
+	crown.radius = 0.0
+	st.props.append(crown)
+
+
+func _place_waypoint(ri: int, pos: Vector2) -> void:
+	var p := add_prop("waypoint", pos)
+	p.radius = 0.0
+	rt[ri].waypoint = p
+	rt[ri].props.append(p)
+
+
+func _place_chests(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var z: int = r.zone
+	var opened: Dictionary = Game.zs(z).chests
+	for i in (r.chests as Array).size():
+		var c: Dictionary = r.chests[i]
+		var p := add_prop("chest_iron" if c.iron else "chest", c.pos)
+		p.radius = 0.0
+		p.chest_id = i
+		p.used = opened.has(i)
+		rt[ri].props.append(p)
+
+
+func _place_doors(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	for i in range(Data.LAST_ZONE + 1, Data.ZONES.size()):
+		var it: Dictionary = Data.ZONES[i]
+		if int(it.parent) != int(r.zone):
+			continue
+		var pos: Vector2
+		if r.zone < 0:
+			pos = r.pois.door
+		else:
+			var cell: Vector2i = r.branches[0] if not (r.branches as Array).is_empty() else r.nodes[1]
+			pos = _cell_pos(cell)
+			for p in rt[ri].props:
+				if p.global_position.distance_to(pos) < 130.0 and p.radius > 0.0:
+					_unregister_solid(p)
+					p.radius = 0.0
+					p.visible = false
+		var d := add_prop("door", pos)
+		d.radius = 0.0
+		d.door_idx = i
+		rt[ri].props.append(d)
+
+
+func _place_gates(ri: int) -> void:
+	for gi in map.gates.size():
+		var g: Dictionary = map.gates[gi]
+		if int(g.a) != ri or ri == 0:
+			continue
+		var z: int = map.regions[ri].zone
+		if Game.zs(z).claimed:
+			continue
+		var along := Vector2(g.dir).normalized()
+		var perp := Vector2(-along.y, along.x)
+		var base := _cell_pos(g.cell)
+		var segs: Array = []
+		for k in range(-2, 3):
+			var p := add_prop("gate_seg", base + perp * k * 64.0)
+			interactives.erase(p)
+			p.radius = 34.0
+			_register_solid(p)
+			segs.append(p)
+			rt[ri].props.append(p)
+		rt[ri].gates.append({"segs": segs, "zone": z})
+
+
+func open_gates(ri: int) -> void:
+	for gd in rt[ri].gates:
+		for p in gd.segs:
+			_unregister_solid(p)
+			p.radius = 0.0
+			glow_fx.burst(p.global_position + Vector2(0, -40), 14, Color(2.4, 1.2, 0.5), 60, 200, 0.8, 3.0, Particles.SPARK)
+			p.queue_free()
+			props.erase(p)
+	rt[ri].gates.clear()
+	Sfx.play("slam", -4.0)
+	shake(8.0)
+
+
+func _place_ambush(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var em: Dictionary = r.zd.get("emerge", {})
+	if em.is_empty():
+		return
+	var cands: Array = []
+	for p in rt[ri].props:
+		if p.kind in em.from:
+			cands.append(p)
+	cands.shuffle()
+	for i in mini(int(em.sites), cands.size()):
+		var p: Prop = cands[i]
+		if not is_floor_at(p.global_position + Vector2(0, 24)):
+			continue
+		ambush.append({"pos": p.global_position + Vector2(0, 24), "kind": em.kind, "n": randi_range(2, 3), "ri": ri, "done": false})
+
+
+func _place_village(ri: int) -> void:
+	var r: Dictionary = map.regions[ri]
+	var pois: Dictionary = r.pois
+	for k in ["smith", "mystic", "elder", "keeper"]:
+		var n := Npc.new()
+		n.world = self
+		n.setup(k)
+		entity_layer.add_child(n)
+		n.global_position = pois["stash" if k == "keeper" else k]
+		npcs.append(n)
+		_register_solid_npc(n)
+	_place_waypoint(ri, pois.waypoint)
+	_place_doors(ri)
+
+
+func _register_solid_npc(n: Npc) -> void:
+	var c := Vector2i(n.global_position / CELL)
+	if not prop_cells.has(c):
+		prop_cells[c] = []
+	prop_cells[c].append(n)
+	blocked[c] = true
+
+
+func _activate_region(ri: int) -> void:
+	var st: Dictionary = rt[ri]
+	if st.active:
+		return
+	st.active = true
+	var r: Dictionary = map.regions[ri]
+	_build_props(ri)
+	if interior:
+		_spawn_packs(ri)
+		_place_chests(ri)
+		var ex := add_prop("door", _cell_pos(r.start))
+		ex.radius = 0.0
+		ex.door_idx = -1
+		st.props.append(ex)
+		return
+	if r.zone < 0:
+		_place_village(ri)
+		return
+	_spawn_packs(ri)
+	_place_shrines(ri)
+	_place_chests(ri)
+	_place_waypoint(ri, _cell_pos(r.waypoint))
+	_place_doors(ri)
+	_place_ambush(ri)
+	_place_finale(ri)
+	_place_gates(ri)
+
+
+## Packs come back after you have been away for a while: this is a game about going round again.
+func _respawn_region(ri: int) -> void:
+	for e in enemies.duplicate():
+		if e.region == ri and not e.is_champion and not e.is_boss and e.pack != 999:
+			e.queue_free()
+			enemies.erase(e)
+	for a in ambush:
+		if a.ri == ri:
+			a.done = false
+	_spawn_packs(ri)
 
 
 func _set_objective() -> void:
-	if zone_idx == Data.ZONES.size() - 1:
-		objective = "Find the Ember King" if state == "explore" else ("Kill the Ember King" if state == "boss" else "")
-	elif champion and not champion.dead:
-		objective = "Slay %s" % champion.display_name
-	elif state == "altar":
+	if cur < 0:
+		return
+	var r: Dictionary = map.regions[cur]
+	var st: Dictionary = rt[cur]
+	var z: int = r.zone
+	objective_pos = st.arena_center
+	if z < 0:
+		var m := Game.quest_marker()
+		if Game.quest_status("story_0") == 1:
+			objective = "Enter Maren's Cellar"
+			objective_pos = r.pois.door
+		else:
+			objective = "Speak with Sister Maren" if m != "" else "Take the road to the Blackwood"
+			objective_pos = r.pois.elder if m != "" else (Vector2(r.finish) + Vector2(0.5, 0.5)) * CELL
+		return
+	if interior:
+		objective = "Find the reliquary chest" if Game.quest_status("story_0") == 1 else "Plunder the depths"
+		objective_pos = Vector2.ZERO
+		for p in props:
+			if p.kind.begins_with("chest") and not p.used:
+				objective_pos = p.global_position
+				break
+		return
+	var zs := Game.zs(z)
+	if z == Data.LAST_ZONE and zs.boss_dead:
+		objective = "Take the crown"
+	elif st.state == "altar":
 		objective = "Claim the crown fragment"
+	elif st.champion != null and not (st.champion as Enemy).dead:
+		objective = "Slay %s" % (st.champion as Enemy).display_name
+	elif st.boss != null and not (st.boss as Enemy).dead:
+		objective = "Find and kill the Ember King" if st.state == "explore" else "Kill the Ember King"
+	elif zs.claimed:
+		objective = "Follow the tunnel onward"
+		objective_pos = _cell_pos(r.finish)
+	elif Game.quest_active_for("champion", z) or Game.quest_active_for("boss", z):
+		objective = "Hunt the beast in the arena"
+	elif Game.quest_active_for("chest", z):
+		objective = "Find chests"
+		var near := INF
+		for p in st.props:
+			if p.kind.begins_with("chest") and not p.used and p.global_position.distance_to(player.global_position) < near:
+				near = p.global_position.distance_to(player.global_position)
+				objective_pos = p.global_position
 	else:
-		objective = "Descend"
+		objective = "Speak with the Elder about this land"
+		objective_pos = map.regions[0].pois.elder
 
 
 # ================================================================ spawning
 
-func spawn_enemy(kind: String, pos: Vector2, special: bool) -> Enemy:
+func spawn_enemy(kind: String, pos: Vector2, special: bool, ri := -1) -> Enemy:
+	if ri < 0:
+		ri = maxi(cur, 0)
+	var zd: Dictionary = map.regions[ri].zd
 	var e: Enemy
 	if kind == "ember_king":
 		e = Boss.new()
 	else:
 		e = Enemy.new()
 	e.world = self
-	e.setup(kind, zone.hp_mult * (1.25 if Game.fragments.has("greed") else 1.0), zone.dmg_mult)
+	var d: Dictionary = Game.diff()
+	e.setup(kind, float(zd.hp_mult) * float(Data.GRIND.enemy_hp) * float(d.hp) * (1.25 if Game.fragments.has("greed") else 1.0), float(zd.dmg_mult) * float(d.dmg))
+	if kind == "ember_king":
+		e.max_hp *= float(d.hp) * 1.35
+		e.hp = e.max_hp
+	e.zone_idx = map.regions[ri].zone
+	e.region = ri
 	entity_layer.add_child(e)
 	e.global_position = pos
 	enemies.append(e)
@@ -480,15 +845,18 @@ func _process(delta: float) -> void:
 	smoke_fx.update(dt)
 	texts.update(dt)
 	decals.update(dt)
+	if guide_node:
+		guide_node.queue_redraw()
 	_update_camera(delta)
 
 
 func _update_attract(dt: float) -> void:
 	_attract_t += dt * 0.035
-	var n := map.nodes.size()
+	var nodes: Array = map.regions[0].nodes
+	var n := nodes.size()
 	var f := fmod(_attract_t, float(n - 1))
 	var i := int(f)
-	var target := _cell_pos(map.nodes[i]).lerp(_cell_pos(map.nodes[mini(i + 1, n - 1)]), smoothstep(0.0, 1.0, f - i))
+	var target := _cell_pos(nodes[i]).lerp(_cell_pos(nodes[mini(i + 1, n - 1)]), smoothstep(0.0, 1.0, f - i))
 	camera.global_position = camera.global_position.lerp(target, dt * 0.6)
 	for p in props:
 		p.update(dt)
@@ -496,13 +864,25 @@ func _update_attract(dt: float) -> void:
 
 func _update_game(dt: float) -> void:
 	Game.stats.time += dt
+	Game.stat_add("playtime", dt)
+	Game.stat_add("playtime_class", dt, Game.class_id)
+	_track_distance()
+	full_warn = maxf(0.0, full_warn - dt)
+	_lowhp_t = maxf(0.0, _lowhp_t - dt)
+	Game.potion_cd = maxf(0.0, Game.potion_cd - dt)
+	Game.diff_cd = maxf(0.0, Game.diff_cd - dt)
 	if player and not player.dead:
 		player.update(dt)
 	_update_flow(dt)
+	_region_timer -= dt
+	if _region_timer <= 0.0:
+		_region_timer = 0.25
+		_update_region()
 	_activate_timer -= dt
 	if _activate_timer <= 0.0:
 		_activate_timer = 0.2
 		_activate_packs()
+		_update_ambush()
 	var pp := player.global_position
 	var active: Array[Enemy] = []
 	for e in enemies:
@@ -511,7 +891,7 @@ func _update_game(dt: float) -> void:
 		if e.global_position.distance_squared_to(pp) > UPDATE_DIST * UPDATE_DIST and not e.is_boss:
 			continue
 		e.update(dt)
-		if not e.sleeping:
+		if not e.sleeping and e.emerge_t <= 0.0:
 			active.append(e)
 	_separate(active)
 	for m in minions:
@@ -523,12 +903,22 @@ func _update_game(dt: float) -> void:
 		h.update(dt)
 	for p in pickups:
 		p.update(dt)
+	for l in loots:
+		l.update(dt)
+	for n in npcs:
+		n.update(dt)
 	for p in props:
 		if p.global_position.distance_squared_to(pp) < 1600.0 * 1600.0:
 			p.update(dt)
 	_cleanup()
+	_update_interact()
+	_update_guide(dt)
+	_update_recall(dt)
 	_check_interactives()
 	_update_boss_gate()
+	if player and not player.dead and player.hp < player.max_hp * 0.25 and _lowhp_t <= 0.0:
+		_lowhp_t = 30.0
+		Voice.bark("player", "lowhp", "", 30.0)
 	_minimap_timer -= dt
 	if _minimap_timer <= 0.0:
 		_minimap_timer = 0.15
@@ -536,6 +926,7 @@ func _update_game(dt: float) -> void:
 		if _minimap_dirty:
 			_minimap_dirty = false
 			minimap_tex.update(minimap_img)
+	canvas_mod.color = canvas_mod.color.lerp(_target_mod, clampf(dt * 1.2, 0.0, 1.0))
 	for i in range(corpses.size() - 1, -1, -1):
 		corpses[i].t -= dt
 		if corpses[i].t <= 0.0:
@@ -563,24 +954,53 @@ func _cleanup() -> void:
 		if pickups[i].done:
 			pickups[i].queue_free()
 			pickups.remove_at(i)
+	for i in range(loots.size() - 1, -1, -1):
+		if loots[i].done:
+			loots[i].queue_free()
+			loots.remove_at(i)
 
 
 func _activate_packs() -> void:
 	var pp := player.global_position
 	var woken := {}
 	for e in enemies:
-		if e.sleeping and not e.dead and e.pack >= 0 and e.global_position.distance_squared_to(pp) < ACTIVATE_DIST * ACTIVATE_DIST:
-			if los(e.global_position, pp):
+		if e.sleeping and not e.dead and e.pack >= 0 and e.emerge_t <= 0.0:
+			var d2 := e.global_position.distance_squared_to(pp)
+			# Only close, visible enemies notice you; the rest keep milling about.
+			if d2 < ACTIVATE_DIST * ACTIVATE_DIST and (d2 < 190.0 * 190.0 or los(e.global_position, pp)):
 				woken[e.pack] = true
 	if woken.is_empty():
 		return
 	for e in enemies:
 		if e.sleeping and woken.has(e.pack):
 			e.wake()
-			if e == champion:
-				banner.emit(champion.display_name, "")
+			if e.is_champion:
+				banner.emit(e.display_name, "")
 				Sfx.play("roar", -4.0)
+				Voice.bark("boss", "intro", "You should not have come.", 5.0)
 	Sfx.play("growl", -8.0, 0.15)
+
+
+func _update_ambush() -> void:
+	var pp := player.global_position
+	for a in ambush:
+		if a.done:
+			continue
+		var d: float = a.pos.distance_to(pp)
+		if d < 210.0:
+			a.done = true
+			for i in int(a.n):
+				var e := spawn_enemy(a.kind, a.pos + Vector2(randf_range(-40, 40), randf_range(-20, 30)), false, a.ri)
+				if not is_floor_at(e.global_position):
+					e.global_position = a.pos
+				e.pack = -2
+				e.start_emerge()
+			smoke_fx.burst(a.pos, 16, Color(0.3, 0.22, 0.15, 0.9), 40, 200, 0.9, 8.0, Particles.DEBRIS, TAU, 0.0, 3.0, 300.0)
+			Sfx.play("slam", -8.0, 0.1, 0.7)
+			shake(5.0)
+			Voice.bark("player", "trap", "", 20.0)
+		elif d < 420.0 and randf() < 0.06:
+			smoke_fx.burst(a.pos, 3, Color(0.3, 0.22, 0.15, 0.7), 10, 60, 0.7, 4.0, Particles.DEBRIS, TAU, 0.0, 2.0, 200.0)
 
 
 func alert_pack(pack: int) -> void:
@@ -622,7 +1042,7 @@ func _check_interactives() -> void:
 	if not player or player.dead:
 		return
 	for p in interactives:
-		if p.used:
+		if p.used or p.kind in INTERACT_KINDS:
 			continue
 		if p.global_position.distance_to(player.global_position) < 70.0:
 			p.used = true
@@ -630,8 +1050,6 @@ func _check_interactives() -> void:
 				"altar":
 					Sfx.play("fragment")
 					fragment_ready.emit()
-				"portal":
-					zone_exit.emit()
 				"shrine_fury":
 					player.add_buff("fury", 30.0)
 					banner.emit("Shrine of Fury", "Damage increased for 30 seconds")
@@ -647,9 +1065,11 @@ func _check_interactives() -> void:
 
 
 func _update_boss_gate() -> void:
-	if not boss or boss.dead:
+	if cur < 0 or not boss or boss.dead:
 		return
-	if state == "explore" and player.global_position.distance_to(arena_center) < arena_radius - 3.0 * CELL:
+	var st: Dictionary = rt[cur]
+	if st.state == "explore" and player.global_position.distance_to(arena_center) < arena_radius - 3.0 * CELL:
+		st.state = "boss"
 		state = "boss"
 		boss.sleeping = false
 		boss.intro()
@@ -693,6 +1113,10 @@ func damage(target: Actor, amount: float, src: Actor, opts := {}) -> float:
 		if dmg <= 0.0:
 			return 0.0
 	target.hp -= dmg
+	if target is Player:
+		Game.stat_add("damage_taken", dmg)
+	if target is Player and src is Enemy:
+		Game.last_killer = (src as Enemy).display_name
 	if not opts.get("dot", false):
 		target.flash = 1.0
 		bleed(target, dmg, src, crit)
@@ -706,6 +1130,10 @@ func damage(target: Actor, amount: float, src: Actor, opts := {}) -> float:
 		target.apply_stun(opts.stun)
 	if from_player:
 		Game.stats.damage_dealt += dmg
+		Game.stat_add("damage_dealt", dmg)
+		Game.stat_max("biggest_hit", dmg)
+		if crit:
+			Game.stat_add("crits", 1.0)
 		if target.marked and player and player.has_mod("mark_drain"):
 			player.heal(dmg * 0.03, false)
 	if Game.settings.numbers and (not opts.get("dot", false) or randf() < 0.35):
@@ -786,8 +1214,13 @@ func _kill(target: Actor, src: Actor, overkill := false) -> void:
 		return
 	var e := target as Enemy
 	Game.stats.kills += 1
+	Game.stat_add("kills", 1.0)
+	Game.stat_add("zone_kills", 1.0, str(e.zone_idx))
+	Game.stat_add("kinds", 1.0, e.display_name if (e.is_champion or e.is_boss) else String(e.variant))
 	if e.elite or e.is_champion:
 		Game.stats.elites += 1
+		Game.stat_add("elites", 1.0)
+		Game.quest_advance("elite", e.zone_idx)
 	var pos := e.global_position
 	var bc := e.blood_color()
 	if Game.settings.get("gore", true) and bc.a > 0.0:
@@ -801,13 +1234,17 @@ func _kill(target: Actor, src: Actor, overkill := false) -> void:
 	glow_fx.burst(pos, 8, Color(3.0, 1.1, 0.3), 60, 260, 0.6, 2.5, Particles.SPARK)
 	corpses.append({"pos": pos, "t": 10.0})
 	if player:
-		var xp := float(e.xp) * (1.5 if Game.fragments.has("greed") else 1.0)
+		var xp := float(e.xp) * float(Data.GRIND.xp_mult) * (1.0 + e.zone_idx * float(Data.GRIND.xp_zone)) * float(Game.diff().xp) * (1.5 if Game.fragments.has("greed") else 1.0)
 		player.on_kill(e, xp)
+		_drop_loot(e, pos)
+		Game.quest_advance("kill", e.zone_idx)
 		_flask_kills += 1
 		if _flask_kills >= 32:
 			_flask_kills = 0
 			player.add_flask_charge()
 	var globe_chance := 0.09 if not (e.elite or e.is_champion) else 1.0
+	if Game.gear_stat("blast") > 0.0:
+		hazards_explosion(pos, 70.0 + e.radius * 2.0, e.max_hp * Game.gear_stat("blast") / 100.0, player, Actor.Team.PLAYER, Color(3.0, 1.0, 0.25))
 	if randf() < globe_chance:
 		drop_globe(pos)
 	if Game.fragments.has("embers"):
@@ -816,12 +1253,10 @@ func _kill(target: Actor, src: Actor, overkill := false) -> void:
 	if e.marked and player and player.has_mod("mark_spread"):
 		for o in enemies_in_radius(pos, 160.0):
 			o.apply_vuln(0.35, 5.0, true)
-	if e == champion:
-		_on_champion_dead(pos)
-	if e == boss:
-		state = "done"
-		_set_objective()
-		boss_defeated.emit()
+	if e.is_champion:
+		_on_champion_dead(e, pos)
+	if e.is_boss:
+		_on_boss_dead(e, pos)
 
 
 func _gore_death(e: Enemy, src: Actor, c: Color, overkill: bool) -> void:
@@ -852,24 +1287,333 @@ func _gore_death(e: Enemy, src: Actor, c: Color, overkill: bool) -> void:
 	Sfx.play("enemy_death", -6.0, 0.12)
 
 
-func _on_champion_dead(pos: Vector2) -> void:
-	state = "altar"
+func _on_champion_dead(e: Enemy, pos: Vector2) -> void:
+	var st: Dictionary = rt[e.region]
+	var z: int = e.zone_idx
+	Game.zs(z).champ_dead = true
+	Game.stat_add("champions", 1.0)
+	st.state = "altar"
+	st.champion = null
+	champion = null
+	if cur == e.region:
+		state = "altar"
 	_set_objective()
 	shake(14.0)
 	Sfx.play("explode")
-	var c := arena_center
-	var altar := add_prop("altar", c)
+	var altar := add_prop("altar", st.arena_center)
 	altar.radius = 0.0
+	st.props.append(altar)
 	glow_fx.burst(pos, 40, Color(3.0, 1.2, 0.3), 80, 400, 1.2, 3.5, Particles.SPARK)
-	banner.emit("%s falls" % champion.display_name, "A crown fragment lies on the altar")
+	banner.emit("%s falls" % e.display_name, "A crown fragment lies on the altar")
+	# A champion always drops a weapon and two more pieces.
+	var ilvl := Items.drop_ilvl(z, 2)
+	var mf := Game.gear_stat("mf") + float(Game.diff().mf)
+	drop_item(Items.roll_drop("champion", ilvl, mf, "weapon", 2), pos)
+	for i in 2:
+		drop_item(Items.roll_drop("champion", ilvl, mf, "", 2), pos)
+	for i in 6:
+		drop_gold(int((12.0 + 6.0 * z) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold)), pos)
+	Game.quest_advance("champion", z)
+	Voice.bark("player", "quest_done", "", 5.0)
+
+
+func _on_boss_dead(e: Enemy, pos: Vector2) -> void:
+	var st: Dictionary = rt[e.region]
+	var z: int = e.zone_idx
+	Game.zs(z).boss_dead = true
+	Game.stat_add("bosses", 1.0)
+	st.boss = null
+	boss = null
+	st.state = "done"
+	state = "done"
+	_place_crown(e.region)
+	_set_objective()
+	shake(18.0)
+	var ilvl := Items.drop_ilvl(z, 3)
+	for it in Items.boss_loot(ilvl):
+		drop_item(it, pos)
+	for i in 14:
+		drop_gold(int((30.0 + 8.0 * z) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold)), pos)
+	banner.emit("The Ember King falls", "His crown lies on the throne")
+	Game.quest_advance("boss", z)
+	Voice.bark("player", "boss_dead", "", 5.0)
+	boss_defeated.emit()
+
+
+# ================================================================ loot
+
+func _scatter(pos: Vector2) -> Vector2:
+	for i in 6:
+		var p := pos + Vector2.from_angle(randf() * TAU) * randf_range(24.0, 90.0)
+		if is_floor_at(p):
+			return p
+	return pos
+
+
+func drop_item(item: Dictionary, pos: Vector2) -> void:
+	var l := Loot.new()
+	l.world = self
+	l.item = item
+	entity_layer.add_child(l)
+	l.global_position = _scatter(pos)
+	loots.append(l)
+	if int(item.rarity) >= 3:
+		glow_fx.ring(l.global_position, 90.0, Color(3.0, 1.4, 0.4, 0.9), 0.6)
+		Sfx.play("levelup", -8.0, 0.1, 0.7)
+	elif int(item.rarity) == 2:
+		Sfx.play("fragment", -14.0, 0.1, 1.2)
+
+
+func drop_gold(amount: int, pos: Vector2) -> void:
+	if amount <= 0:
+		return
+	var l := Loot.new()
+	l.world = self
+	l.gold = amount
+	entity_layer.add_child(l)
+	l.global_position = _scatter(pos)
+	loots.append(l)
+
+
+func _drop_loot(e: Enemy, pos: Vector2) -> void:
+	if e.is_champion or e.is_boss:
+		return
+	var z := e.zone_idx
+	var mf := Game.gear_stat("mf") + float(Game.diff().mf)
+	var gold_base := (1.5 + e.xp * 0.8) * (1.0 + z * 0.55) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold)
+	if e.elite:
+		drop_gold(int(round(gold_base * 6.0)), pos)
+		drop_item(Items.roll_drop("elite", Items.drop_ilvl(z, 1), mf), pos)
+		if randf() < 0.25:
+			drop_item(Items.roll_drop("elite", Items.drop_ilvl(z, 1), mf), pos)
+		return
+	if randf() < 0.5:
+		drop_gold(maxi(1, int(round(gold_base * randf_range(0.6, 1.4)))), pos)
+	if randf() < float(Data.GRIND.drop_chance):
+		drop_item(Items.roll_drop("normal", Items.drop_ilvl(z), mf), pos)
+
+
+func open_chest(p: Prop) -> void:
+	p.used = true
+	var z: int = map.regions[cur].zone
+	Game.zs(z).chests[p.chest_id] = true
+	var iron := p.kind == "chest_iron"
+	Game.stat_add("chests", 1.0)
+	Sfx.play("hit_heavy", -6.0, 0.1, 0.7)
+	glow_fx.burst(p.global_position + Vector2(0, -20), 16, Color(3.0, 2.0, 0.6), 60, 240, 0.7, 2.5, Particles.SPARK)
+	var mf := Game.gear_stat("mf") + float(Game.diff().mf)
+	var ilvl := Items.drop_ilvl(maxi(z, 0), 1 if iron else 0)
+	var n := (2 if iron else 1) + (1 if randf() < (0.4 if iron else 0.4) else 0)
+	for i in n:
+		drop_item(Items.roll_drop("iron" if iron else "chest", ilvl, mf), p.global_position)
+	var gold := int((6.0 + 4.0 * maxi(z, 0)) * randf_range(0.8, 1.4) * (2.0 if iron else 1.0) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold))
+	for i in 3:
+		drop_gold(maxi(1, gold / 3), p.global_position)
+	if not iron and not interior and randf() < 0.1:
+		banner.emit("A trap!", "The chest was bait")
+		var kinds: Array = (zone.pool as Dictionary).keys()
+		for i in 4:
+			var a := TAU * i / 4.0 + randf()
+			var e := spawn_enemy(kinds[randi() % kinds.size()], p.global_position + Vector2(cos(a), sin(a)) * 120.0, false, cur)
+			if not is_floor_at(e.global_position):
+				e.global_position = p.global_position
+			e.pack = -2
+			e.wake()
+		Voice.bark("player", "trap", "", 5.0)
+	else:
+		Voice.bark("player", "chest", "", 40.0)
+	Game.quest_advance("chest", z)
+
+
+# ================================================================ interaction
+
+func _update_interact() -> void:
+	interact_target = null
+	interact_text = ""
+	if not player or player.dead:
+		return
+	var pp := player.global_position
+	var best := 100.0
+	for n in npcs:
+		var d := n.global_position.distance_to(pp)
+		if d < best:
+			best = d
+			interact_target = n
+			interact_text = "Talk to %s" % n.display_name
+	for p in interactives:
+		if p.kind not in INTERACT_KINDS or p.global_position.distance_to(pp) > 110.0:
+			continue
+		if p.kind.begins_with("chest") and p.used:
+			continue
+		var d2 := p.global_position.distance_to(pp)
+		if d2 < best:
+			best = d2
+			interact_target = p
+			match p.kind:
+				"chest": interact_text = "Open chest"
+				"chest_iron": interact_text = "Open iron chest"
+				"waypoint": interact_text = "Use waypoint"
+				"crown": interact_text = "Take the crown"
+				"door": interact_text = "Leave" if p.door_idx < 0 else "Enter %s" % Data.ZONES[p.door_idx].name
+	# Waypoints unlock when you first touch them.
+	if cur >= 0 and rt[cur].waypoint != null and not interior:
+		var wp: Prop = rt[cur].waypoint
+		var wid := "z%d" % map.regions[cur].zone
+		if map.regions[cur].zone >= 0 and not Game.waypoints.has(wid) and wp.global_position.distance_to(pp) < 90.0:
+			Game.unlock(wid)
+			banner.emit("Waypoint discovered", "You can now travel here from any waypoint")
+			Sfx.play("fragment", -4.0)
+			Voice.bark("player", "waypoint", "", 8.0)
+			glow_fx.ring(wp.global_position, 120.0, Color(0.8, 1.8, 3.0, 0.9), 0.6)
+	if interact_target and Input.is_action_just_pressed("interact"):
+		_interact(interact_target)
+
+
+func _interact(t: Node) -> void:
+	if t is Npc:
+		npc_talk.emit((t as Npc).kind)
+		return
+	var p := t as Prop
+	match p.kind:
+		"chest", "chest_iron": open_chest(p)
+		"waypoint": waypoint_open.emit()
+		"crown": crown_taken.emit()
+		"door":
+			if p.door_idx < 0:
+				door_exit.emit()
+			else:
+				door_enter.emit(p.door_idx)
+
+
+# ================================================================ regions
+
+func _update_region() -> void:
+	if interior or not player:
+		return
+	var c := Vector2i(player.global_position / CELL)
+	var i := map.region_at(c.x, c.y)
+	if i != cur:
+		_enter_region(i)
+	# Hint about the arena when no hunt is active
+	if cur >= 0 and not village and not _near_arena_msg.has(cur):
+		var st: Dictionary = rt[cur]
+		var z: int = map.regions[cur].zone
+		if player.global_position.distance_to(st.arena_center) < 900.0 and st.champion == null and st.boss == null and not Game.zs(z).champ_dead and not Game.zs(z).boss_dead:
+			_near_arena_msg[cur] = true
+			banner.emit("Something sleeps here", "Take the hunt from the Elder to wake it")
+
+
+func _enter_region(i: int) -> void:
+	var old := cur
+	if old >= 0:
+		rt[old].left_at = Time.get_ticks_msec() / 1000.0
+	cur = i
+	var r: Dictionary = map.regions[i]
+	var st: Dictionary = rt[i]
+	zone = r.zd
+	zone_idx = r.zone
+	village = r.zone < 0
+	if not st.active:
+		_activate_region(i)
+	elif Time.get_ticks_msec() / 1000.0 - float(st.left_at) > 150.0 and not village and not interior:
+		_respawn_region(i)
+	arena_center = st.arena_center
+	arena_radius = 13.0 * CELL
+	champion = st.champion
+	boss = st.boss
+	state = st.state
+	_target_mod = zone.modulate
+	_set_objective()
+	if not interior and old != i:
+		banner.emit(zone.name, zone.line)
+		Sfx.ambience(zone.get("ambient", ""))
+		Sfx.music("music_title" if village else "music_combat", 2.0)
+		for amb in _ambient:
+			if amb is CPUParticles2D and amb.material == unshaded_add:
+				var vc: Color = zone.vein
+				amb.color = Color(vc.r, vc.g, vc.b, 1.0)
+	if r.zone >= 0 and not interior:
+		var zs := Game.zs(r.zone)
+		zs.visited = true
+		Game.max_zone = maxi(Game.max_zone, r.zone)
+		var act := Data.act_of(r.zone)
+		if not Game.acts_seen.has(act):
+			Game.acts_seen[act] = true
+			act_entered.emit(act)
+
+
+## Where every unlocked waypoint is. Only places you have touched appear.
+func waypoint_targets() -> Array:
+	var out: Array = [{"id": "village", "name": "Cinderfall", "sub": "Village", "pos": (map.regions[0].pois.waypoint as Vector2) + Vector2(0, 64)}]
+	for i in range(1, map.regions.size()):
+		var r: Dictionary = map.regions[i]
+		if Game.waypoints.has("z%d" % r.zone):
+			out.append({"id": "z%d" % r.zone, "name": r.zd.name, "sub": Data.ACTS[Data.act_of(r.zone)].name, "pos": _cell_pos(r.waypoint) + Vector2(0, 64)})
+	return out
+
+
+func teleport_player(pos: Vector2) -> void:
+	player.global_position = pos
+	camera.global_position = pos
+	camera.reset_smoothing()
+	glow_fx.burst(pos, 30, Color(0.8, 1.8, 3.0), 80, 320, 0.8, 3.0, Particles.SPARK)
+	Sfx.play("teleport", -4.0)
+	_update_region()
+	for e in enemies:
+		e.drop_aggro()
+
+
+# ================================================================ recall sigil
+
+func start_recall() -> bool:
+	if recall_t > 0.0 or recall_cd > 0.0 or village or player.dead:
+		return false
+	if state == "boss":
+		banner.emit("You cannot leave", "The arena holds you")
+		return false
+	recall_t = 3.0
+	recall_prop = add_prop("sigil", player.global_position)
+	recall_prop.radius = 0.0
+	interactives.erase(recall_prop)
+	Sfx.play("summon", -4.0, 0.0, 0.8)
+	return true
+
+
+func cancel_recall() -> void:
+	recall_t = 0.0
+	if recall_prop and is_instance_valid(recall_prop):
+		recall_prop.queue_free()
+		props.erase(recall_prop)
+	recall_prop = null
+
+
+func _update_recall(dt: float) -> void:
+	recall_cd = maxf(0.0, recall_cd - dt)
+	if Input.is_action_just_pressed("recall") and not get_tree().paused:
+		start_recall()
+	if recall_t <= 0.0:
+		return
+	if player.dead or player.hurt_t > 0.0:
+		cancel_recall()
+		banner.emit("Recall interrupted", "")
+		recall_cd = 4.0
+		return
+	recall_t -= dt
+	if recall_t <= 0.0:
+		cancel_recall()
+		recall_cd = 20.0
+		Voice.bark("player", "recall", "", 5.0)
+		recall_done.emit()
 
 
 func claim_fragment_done() -> void:
+	var z: int = zone_idx
+	Game.zs(z).claimed = true
+	rt[cur].state = "portal"
 	state = "portal"
 	_set_objective()
-	var portal := add_prop("portal", arena_center + Vector2(0, 150))
-	portal.radius = 0.0
-	banner.emit("The way down is open", "")
+	open_gates(cur)
+	banner.emit("The way onward is open", "The tunnel gate grinds aside")
 
 
 func hazards_explosion(pos: Vector2, r: float, dmg: float, src: Actor, team: int, c: Color) -> void:
@@ -1088,6 +1832,12 @@ func _update_camera(delta: float) -> void:
 		a.emission_rect_extents = vs * 0.6
 
 
+func is_explored(c: Vector2i) -> bool:
+	if c.x < 0 or c.y < 0 or c.x >= map.w or c.y >= map.h:
+		return false
+	return explored[c.y * map.w + c.x] == 1
+
+
 func _reveal() -> void:
 	if not player:
 		return
@@ -1102,30 +1852,33 @@ func _reveal() -> void:
 				continue
 			if Vector2(x - c.x, y - c.y).length_squared() > r * r:
 				continue
-			if minimap_img.get_pixel(x, y).a > 0.0:
+			var idx := y * map.w + x
+			if explored[idx] == 1:
 				continue
-			var col := Color(0.55, 0.5, 0.46, 0.75) if map.is_floor(x, y) else Color(0, 0, 0, 0)
-			if not map.is_floor(x, y):
+			explored[idx] = 1
+			if map.is_floor(x, y):
+				minimap_img.set_pixel(x, y, Color(0.55, 0.5, 0.46, 0.75))
+				_minimap_dirty = true
+			else:
 				var edge := false
 				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 					if map.is_floor(x + d.x, y + d.y):
 						edge = true
 				if edge:
-					col = Color(0.95, 0.75, 0.5, 0.9)
-				else:
-					col = Color(0, 0, 0, 0.001)
-			minimap_img.set_pixel(x, y, col)
-			_minimap_dirty = true
+					minimap_img.set_pixel(x, y, Color(0.95, 0.75, 0.5, 0.95))
+					_minimap_dirty = true
 
 
 func respawn_player() -> void:
 	player.revive()
-	player.global_position = _cell_pos(map.start)
+	player.global_position = _cell_pos(map.regions[cur].start)
 	camera.reset_smoothing()
+	cancel_recall()
 	for e in enemies:
 		e.drop_aggro()
 	if state == "boss" and boss:
 		state = "explore"
+		rt[cur].state = "explore"
 		boss.hp = boss.max_hp
 		boss.reset_fight()
 		_set_objective()
@@ -1136,3 +1889,114 @@ func respawn_player() -> void:
 	for p in projectiles:
 		if p.team == Actor.Team.ENEMY:
 			p.done = true
+
+
+
+
+func spawn_quest_bosses() -> void:
+	for i in rt.size():
+		if rt[i].active:
+			spawn_quest_boss(i)
+	champion = rt[cur].champion
+	boss = rt[cur].boss
+
+
+var _last_pos := Vector2.ZERO
+
+
+func _track_distance() -> void:
+	if player == null or player.dead:
+		return
+	var d := player.global_position.distance_to(_last_pos)
+	if d < 300.0 and _last_pos != Vector2.ZERO:
+		Game.stat_add("distance", d / 64.0)
+	_last_pos = player.global_position
+
+
+# ================================================================ wayfinding
+
+## Where the guide leads: your own marker if you set one, otherwise whatever the active quest asks.
+func guide_target() -> Vector2:
+	if not Game.markers.is_empty():
+		return Game.markers[Game.markers.size() - 1]
+	return objective_pos
+
+
+func guide_is_marker() -> bool:
+	return not Game.markers.is_empty()
+
+
+func _ensure_guide_grid() -> void:
+	if _astar != null or interior or attract:
+		return
+	const GS := 4
+	var cw := ceili(map.w / float(GS))
+	var ch := ceili(map.h / float(GS))
+	_astar = AStarGrid2D.new()
+	_astar.region = Rect2i(0, 0, cw, ch)
+	_astar.cell_size = Vector2(GS * CELL, GS * CELL)
+	_astar.offset = Vector2(GS * CELL, GS * CELL) * 0.5
+	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_astar.update()
+	for cy in ch:
+		for cx in cw:
+			var n := 0
+			for y in GS:
+				for x in GS:
+					if map.is_floor(cx * GS + x, cy * GS + y):
+						n += 1
+			if n < 6:
+				_astar.set_point_solid(Vector2i(cx, cy))
+
+
+func _update_guide(dt: float) -> void:
+	_guide_t -= dt
+	if _guide_t > 0.0 or player == null:
+		return
+	_guide_t = 0.7
+	_ensure_guide_grid()
+	guide_pts = PackedVector2Array()
+	if _astar == null:
+		return
+	var target := guide_target()
+	if target.distance_to(player.global_position) < 500.0 or target == Vector2.ZERO:
+		return
+	var gs := 4.0 * CELL
+	var a := Vector2i(player.global_position / gs)
+	var b := Vector2i(target / gs)
+	if _astar.is_point_solid(a) or _astar.is_point_solid(b):
+		return
+	var path := _astar.get_point_path(a, b)
+	var out := PackedVector2Array()
+	var travelled := 0.0
+	var prev := player.global_position
+	for i in range(1, path.size()):
+		travelled += prev.distance_to(path[i])
+		prev = path[i]
+		out.append(path[i])
+		if travelled > 1500.0:
+			break
+	guide_pts = out
+
+
+func _draw_guide() -> void:
+	if player == null or guide_pts.is_empty() or player.dead:
+		return
+	var col := Color(0.6, 1.6, 2.4) if guide_is_marker() else Color(2.6, 1.7, 0.6)
+	var pos := player.global_position
+	var t := Time.get_ticks_msec() / 1000.0
+	var dist_acc := 0.0
+	for p in guide_pts:
+		var seg := p - pos
+		var len := seg.length()
+		var dir := seg / maxf(len, 0.001)
+		var d := fmod(t * 120.0, 80.0) - dist_acc
+		while d < len:
+			if d > 0.0:
+				var q := pos + dir * d
+				var total := dist_acc + d
+				var a := clampf(1.0 - total / 1500.0, 0.0, 1.0) * 0.8
+				guide_node.draw_circle(q, 4.0, Color(col.r, col.g, col.b, a), true, -1.0, true)
+			d += 80.0
+		dist_acc += len
+		pos = p

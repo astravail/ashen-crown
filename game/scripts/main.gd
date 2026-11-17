@@ -1,16 +1,21 @@
 extends Node
-## Flow: title → class select → four zones → ending.
+## Flow: title, character, one continuous world, interiors you walk into, ending.
 
 var world: World
+var overworld: World
 var hud: Hud
 var menus: Menus
+var panels: Panels
 var fade: ColorRect
 var zone_card: Control
 var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
+var cut_layer: CanvasLayer
+var env: Environment
 var _overlay := ""
 var _carry := {}
 var _busy := false
+var _door_pos := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -26,8 +31,14 @@ func _ready() -> void:
 	menus = Menus.new()
 	menus.process_mode = Node.PROCESS_MODE_ALWAYS
 	ui_layer.add_child(menus)
+	panels = Panels.new()
+	ui_layer.add_child(panels)
+	cut_layer = CanvasLayer.new()
+	cut_layer.layer = 16
+	cut_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(cut_layer)
 	var top := CanvasLayer.new()
-	top.layer = 20
+	top.layer = 25
 	top.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(top)
 	fade = ColorRect.new()
@@ -39,16 +50,43 @@ func _ready() -> void:
 	zone_card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	zone_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(zone_card)
+	# Always visible, on every screen: the beta tag and the optional FPS counter.
+	var overlay := CanvasLayer.new()
+	overlay.layer = 30
+	overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(overlay)
+	overlay.add_child(FpsCounter.new())
+	var beta := BetaTag.new()
+	beta.set_anchors_preset(Control.PRESET_FULL_RECT)
+	beta.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(beta)
 
 	menus.start_run.connect(_on_start_run)
+	menus.load_character.connect(_on_load_character)
+	var autosave := Timer.new()
+	autosave.wait_time = 40.0
+	autosave.timeout.connect(_autosave)
+	add_child(autosave)
+	autosave.start()
 	menus.resume.connect(_resume)
 	menus.abandon.connect(_go_title)
-	menus.levelup_chosen.connect(_on_levelup_chosen)
 	menus.fragment_chosen.connect(_on_fragment_chosen)
 	menus.respawn.connect(_on_respawn)
 	menus.ending_chosen.connect(_on_ending_chosen)
 	menus.to_title.connect(_go_title)
+	panels.closed.connect(_on_panel_closed)
+	panels.teleport.connect(_on_teleport)
+	Game.gear_changed.connect(_on_gear_changed)
+	Game.settings_changed.connect(_apply_env)
+	Game.quest_ready.connect(_on_quest_ready)
+	Game.quests_changed.connect(func(): if world and world.player: world._set_objective())
+	Game.quest_accepted.connect(func(_id): if world and world.player: world.spawn_quest_bosses())
 	for a in OS.get_cmdline_user_args():
+		if a == "--smoke":
+			var sm: Node = load("res://scripts/debug/smoke.gd").new()
+			sm.main = self
+			add_child(sm)
+			return
 		if a.begins_with("--bot="):
 			var bot: Node = load("res://scripts/debug/bot.gd").new()
 			bot.main = self
@@ -58,7 +96,7 @@ func _ready() -> void:
 
 
 func _build_environment() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	env.background_mode = Environment.BG_CANVAS
 	env.glow_enabled = true
 	env.glow_intensity = 0.9
@@ -77,6 +115,12 @@ func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	_apply_env()
+
+
+func _apply_env() -> void:
+	if env:
+		env.glow_enabled = bool(Game.settings.get("glow", true))
 
 
 # ---------------------------------------------------------------- flow
@@ -84,7 +128,11 @@ func _build_environment() -> void:
 func _go_title() -> void:
 	get_tree().paused = false
 	_overlay = ""
+	Game.in_run = false
+	Game.hardcore = false
+	Voice.stop()
 	await _fade_to(1.0, 0.4)
+	panels.clear()
 	_clear_world()
 	world = World.new()
 	add_child(world)
@@ -102,6 +150,8 @@ func _clear_world() -> void:
 	if world:
 		world.queue_free()
 		world = null
+	overworld = null
+	panels.world = null
 
 
 func _on_start_run(cls: String) -> void:
@@ -109,40 +159,98 @@ func _on_start_run(cls: String) -> void:
 		return
 	Game.new_run(cls)
 	_carry = {}
-	_load_zone(0)
+	_busy = true
+	menus.clear()
+	await _fade_to(1.0, 0.5)
+	await _play_cutscene("intro")
+	_busy = false
+	_start_overworld()
 
 
-func _load_zone(idx: int) -> void:
+func _on_load_character(id: String) -> void:
+	if _busy or not Game.load_character(id):
+		return
+	_carry = Game.player_state
+	_busy = true
+	menus.clear()
+	await _fade_to(1.0, 0.5)
+	_busy = false
+	_start_overworld()
+
+
+func _autosave() -> void:
+	Game.save_lifetime()
+	if world == null or world.attract or world.player == null or world.player.dead or not Game.in_run:
+		return
+	Game.player_state = world.player.export_state()
+	Game.save_character()
+
+
+func _play_cutscene(id: String) -> void:
+	get_tree().paused = true
+	var cs := Cutscene.new()
+	cut_layer.add_child(cs)
+	cs.play(id)
+	await cs.finished
+	get_tree().paused = false
+
+
+func _bind_world(w: World) -> void:
+	world = w
+	panels.world = w
+	hud = Hud.new()
+	hud.world = w
+	hud_layer.add_child(hud)
+	w.banner.connect(hud.show_banner)
+	if w.has_meta("bound"):
+		return
+	w.set_meta("bound", true)
+	w.level_up.connect(_on_level_up)
+	w.fragment_ready.connect(_on_fragment_ready)
+	w.player_died.connect(_on_player_died)
+	w.boss_defeated.connect(_on_boss_defeated)
+	w.npc_talk.connect(_on_npc_talk)
+	w.waypoint_open.connect(func(): _open_panel(func(): panels.show_waypoints()))
+	w.crown_taken.connect(_on_crown_taken)
+	w.door_enter.connect(_enter_interior)
+	w.door_exit.connect(_exit_interior)
+	w.recall_done.connect(_on_recall_done)
+	w.act_entered.connect(_on_act_entered)
+
+
+## The one continuous world: the village and every zone.
+func _start_overworld() -> void:
 	_busy = true
 	get_tree().paused = false
-	Game.zone_index = idx
-	await _fade_to(1.0, 0.6)
+	await _fade_to(1.0, 0.3)
 	menus.clear()
+	panels.clear()
 	_clear_world()
-	world = World.new()
-	add_child(world)
-	world.setup(idx)
+	var w := World.new()
+	add_child(w)
+	w.setup(-1, false, {"seed": Game.world_seed})
+	overworld = w
 	if not _carry.is_empty():
-		world.player.import_state(_carry)
-	hud = Hud.new()
-	hud.world = world
-	hud_layer.add_child(hud)
-	world.banner.connect(hud.show_banner)
-	world.level_up.connect(_on_level_up)
-	world.fragment_ready.connect(_on_fragment_ready)
-	world.zone_exit.connect(_on_zone_exit)
-	world.player_died.connect(_on_player_died)
-	world.boss_defeated.connect(_on_boss_defeated)
-	Sfx.music("music_combat", 2.0)
-	var z: Dictionary = Data.ZONES[idx]
-	Sfx.ambience(z.get("ambient", ""))
-	(zone_card as ZoneCard).show_card(Data.roman(idx + 1), z.name, z.line)
-	await get_tree().create_timer(2.2).timeout
-	Sfx.play("wave", -4.0)
+		w.player.import_state(_carry)
+	_bind_world(w)
+	Sfx.music("music_title", 2.0)
+	var z: Dictionary = Data.VILLAGE
+	(zone_card as ZoneCard).show_card("", z.name, z.line)
+	await get_tree().create_timer(2.0).timeout
 	_fade_to(0.0, 1.0)
 	await get_tree().create_timer(0.6).timeout
 	(zone_card as ZoneCard).hide_card()
 	_busy = false
+	await get_tree().create_timer(1.0).timeout
+	if world and world.player and Game.quest_status("story_0") == 0:
+		Voice.say("elder", "Survivor. Come to the fire. I have something to ask of you.")
+
+
+## Bot and debug shim: jump straight to a zone's start.
+func _load_zone(idx: int) -> void:
+	await _start_overworld()
+	var r: Dictionary = world.map.regions[world.map.zone_region[idx]]
+	world.teleport_player(Vector2(r.start) * World.CELL + Vector2(32, 32))
 
 
 func _fade_to(a: float, dur: float) -> void:
@@ -151,13 +259,54 @@ func _fade_to(a: float, dur: float) -> void:
 	await tw.finished
 
 
+# ---------------------------------------------------------------- input and overlays
+
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause") and world and not world.attract and not _busy:
-		if _overlay == "":
+	if world == null or world.attract or _busy or world.player == null:
+		return
+	if event.is_action_pressed("pause"):
+		if hud and hud.big_map:
+			hud.close_map()
+		elif panels.is_open():
+			panels.close()
+		elif _overlay == "":
 			_pause()
 		elif _overlay == "pause":
 			_resume()
 		get_viewport().set_input_as_handled()
+		return
+	if _overlay != "" and _overlay != "panel":
+		return
+	if event.is_action_pressed("inventory"):
+		_toggle_panel("inv", func(): panels.show_inventory("inv"))
+	elif event.is_action_pressed("quests"):
+		_toggle_panel("quests", func(): panels.show_quests(false))
+	elif event.is_action_pressed("skills"):
+		_toggle_panel("skills", func(): panels.show_skills())
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
+
+func _toggle_panel(m: String, open: Callable) -> void:
+	if panels.is_open():
+		panels.close()
+	elif _overlay == "" and not world.player.dead:
+		_open_panel(open)
+
+
+func _open_panel(open: Callable) -> void:
+	if _overlay != "" or world.player.dead:
+		return
+	_overlay = "panel"
+	get_tree().paused = true
+	open.call()
+
+
+func _on_panel_closed() -> void:
+	_overlay = ""
+	get_tree().paused = false
+	_autosave()
 
 
 func _pause() -> void:
@@ -174,61 +323,133 @@ func _resume() -> void:
 	get_tree().paused = false
 
 
-# ---------------------------------------------------------------- level up
+func _on_gear_changed() -> void:
+	if world and world.player:
+		world.player.recompute()
+
 
 func _on_level_up() -> void:
-	if _overlay != "":
-		return
-	call_deferred("_open_levelup")
-
-
-func _open_levelup() -> void:
 	var p := world.player
-	if p.pending_levels <= 0 or p.dead:
-		return
-	_overlay = "levelup"
-	get_tree().paused = true
-	menus.show_levelup(p.level - p.pending_levels + 1, _roll_upgrades(p))
+	hud.show_banner("Level %d" % p.level, "A skill point is waiting  ·  K")
 
 
-func _roll_upgrades(p: Player) -> Array:
-	var pool: Array = []
-	for u in Data.UPGRADES:
-		var cls: String = u.get("cls", "")
-		if cls != "" and cls != p.cls:
-			continue
-		if p.mod(u.id) >= int(u.max):
-			continue
-		var d: Dictionary = u.duplicate()
-		d.rank = p.mod(u.id)
-		pool.append(d)
-	pool.shuffle()
-	# Prefer at least one class upgrade when available
-	var out: Array = []
-	for u in pool:
-		if u.has("cls") and out.is_empty():
-			out.append(u)
-	for u in pool:
-		if out.size() >= 3:
-			break
-		if not out.has(u):
-			out.append(u)
-	return out
+func _on_quest_ready(title: String) -> void:
+	_autosave()
+	if hud:
+		hud.show_banner("Quest complete", "%s  ·  return to Sister Maren" % title)
+	Sfx.play("fragment", -6.0)
 
 
-func _on_levelup_chosen(id: String) -> void:
-	var p := world.player
-	p.add_mod(id)
-	p.pending_levels -= 1
-	_overlay = ""
-	menus.clear()
-	if p.pending_levels > 0:
-		_open_levelup()
+# ---------------------------------------------------------------- the village folk
+
+func _on_npc_talk(kind: String) -> void:
+	match kind:
+		"elder":
+			Voice.bark("elder", "greet", "", 20.0)
+			_open_panel(func(): panels.show_quests(true))
+		"smith":
+			Voice.bark("smith", "greet", "", 20.0)
+			_open_panel(func(): panels.show_inventory("smith", "smith"))
+		"mystic":
+			Voice.bark("mystic", "greet", "", 20.0)
+			_open_panel(func(): panels.show_inventory("mystic", "mystic"))
+		"keeper":
+			_open_panel(func(): panels.show_inventory("stash"))
+
+
+# ---------------------------------------------------------------- travel
+
+func _on_teleport(pos: Vector2) -> void:
+	_autosave()
+	_overlay = "panel"
+	await _fade_to(1.0, 0.35)
+	if world.interior:
+		_exit_interior_now(pos)
 	else:
-		get_tree().paused = false
+		world.teleport_player(pos)
+	_overlay = ""
+	get_tree().paused = false
+	_fade_to(0.0, 0.5)
 
 
-# ---------------------------------------------------------------- fragments, zones, ending
+func _on_recall_done() -> void:
+	var pos: Vector2 = overworld.map.regions[0].pois.waypoint + Vector2(0, 64)
+	await _fade_to(1.0, 0.4)
+	if world.interior:
+		_exit_interior_now(pos)
+	else:
+		world.teleport_player(pos)
+	_fade_to(0.0, 0.6)
+
+
+func _enter_interior(idx: int) -> void:
+	if _busy:
+		return
+	_busy = true
+	_door_pos = world.player.global_position
+	_carry = world.player.export_state()
+	await _fade_to(1.0, 0.4)
+	overworld.visible = false
+	overworld.process_mode = Node.PROCESS_MODE_DISABLED
+	if hud:
+		hud.queue_free()
+		hud = null
+	var w := World.new()
+	add_child(w)
+	w.setup(idx)
+	w.player.import_state(_carry)
+	_bind_world(w)
+	var zd: Dictionary = Data.ZONES[idx]
+	Sfx.ambience(zd.get("ambient", ""))
+	(zone_card as ZoneCard).show_card("", zd.name, zd.line)
+	await get_tree().create_timer(1.6).timeout
+	_fade_to(0.0, 0.8)
+	(zone_card as ZoneCard).hide_card()
+	_busy = false
+
+
+func _exit_interior() -> void:
+	if _busy or not world.interior:
+		return
+	_busy = true
+	await _fade_to(1.0, 0.4)
+	_exit_interior_now(_door_pos + Vector2(0, 70))
+	_fade_to(0.0, 0.6)
+	_busy = false
+	_autosave()
+
+
+func _exit_interior_now(pos: Vector2) -> void:
+	if not world.interior:
+		return
+	_carry = world.player.export_state()
+	if hud:
+		hud.queue_free()
+		hud = null
+	world.queue_free()
+	overworld.visible = true
+	overworld.process_mode = Node.PROCESS_MODE_INHERIT
+	overworld.camera.make_current()
+	overworld.player.import_state(_carry)
+	overworld.player.hp = maxf(overworld.player.hp, 1.0)
+	_bind_world(overworld)
+	overworld.teleport_player(pos)
+	overworld.cur = -1
+	overworld._update_region()
+	Sfx.ambience(overworld.zone.get("ambient", ""))
+
+
+func _on_act_entered(act: int) -> void:
+	if act < 0 or act > 5:
+		return
+	_busy = true
+	await _fade_to(1.0, 0.5)
+	await _play_cutscene("act%d" % act)
+	await _fade_to(0.0, 0.8)
+	_busy = false
+
+
+# ---------------------------------------------------------------- fragments, death, ending
 
 func _on_fragment_ready() -> void:
 	_overlay = "fragment"
@@ -249,24 +470,29 @@ func _on_fragment_chosen(id: String) -> void:
 	_overlay = ""
 	menus.clear()
 	get_tree().paused = false
-	if world.player.pending_levels > 0:
-		_open_levelup()
-
-
-func _on_zone_exit() -> void:
-	if _busy:
-		return
-	_carry = world.player.export_state()
-	Game.records.best_zone = maxi(int(Game.records.best_zone), Game.zone_index + 1)
-	Game.save_records()
-	_load_zone(Game.zone_index + 1)
 
 
 func _on_player_died() -> void:
 	_overlay = "death"
+	Game.stat_add("deaths", 1.0)
+	Game.save_lifetime()
+	if Game.hardcore:
+		Game.record_fallen(world.zone.name)
+		Game.delete_character(Game.char_id)
+		Game.in_run = false
+		Game.records.fallen = int(Game.records.fallen) + 1
+		Game.records.fallen_best_level = maxi(int(Game.records.fallen_best_level), int(Game.stats.level))
+		Game.save_records()
+		await get_tree().create_timer(2.2).timeout
+		Sfx.music("", 1.0)
+		panels.clear()
+		menus.show_permadeath(world.zone.name)
+		return
+	Game.wear_on_death()
 	await get_tree().create_timer(1.6).timeout
 	if world and world.player.dead:
 		Sfx.music("", 1.0)
+		panels.clear()
 		menus.show_death(world.zone.name)
 
 
@@ -283,10 +509,13 @@ func _on_boss_defeated() -> void:
 	Game.records.wins = int(Game.records.wins) + 1
 	if float(Game.records.fastest) <= 0.0 or Game.stats.time < float(Game.records.fastest):
 		Game.records.fastest = Game.stats.time
-	Game.records.best_zone = Data.ZONES.size()
+	Game.records.best_zone = Data.LAST_ZONE + 1
 	Game.save_records()
 	Sfx.music("music_title", 3.0)
-	await get_tree().create_timer(3.5).timeout
+
+
+## The crown is taken only when the player reaches for it, after the loot is gathered.
+func _on_crown_taken() -> void:
 	_overlay = "ending"
 	get_tree().paused = true
 	menus.show_ending_choice()
@@ -295,6 +524,14 @@ func _on_boss_defeated() -> void:
 func _on_ending_chosen(choice: String) -> void:
 	Sfx.play("fragment" if choice == "shatter" else "roar")
 	menus.show_ending(choice)
+
+
+class BetaTag extends Control:
+	func _draw() -> void:
+		var txt := Game.beta_label()
+		var f := Game.font_display
+		draw_string_outline(f, Vector2(14, size.y - 12), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0, 0, 0, 0.8))
+		draw_string(f, Vector2(14, size.y - 12), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.7, 0.62, 0.52, 0.85))
 
 
 class ZoneCard extends Control:

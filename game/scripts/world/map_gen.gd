@@ -15,6 +15,10 @@ var finish := Vector2i.ZERO
 var packs: Array[Vector2] = []
 var props: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
+var chests: Array[Dictionary] = []
+var waypoint := Vector2i.ZERO
+var pois := {}  # village points of interest, in pixels
+var small := false
 
 
 func generate(zone: Dictionary, seed_value: int) -> void:
@@ -23,6 +27,10 @@ func generate(zone: Dictionary, seed_value: int) -> void:
 	h = zone.size.y
 	grid.resize(w * h)
 	grid.fill(0)
+	small = w < 100
+	if zone.style == "village":
+		_gen_village(zone)
+		return
 	var dungeon: bool = zone.style == "dungeon"
 	_layout_nodes()
 	for i in nodes.size():
@@ -47,14 +55,16 @@ func generate(zone: Dictionary, seed_value: int) -> void:
 	_keep_connected()
 	start = nodes[0]
 	finish = nodes[nodes.size() - 1]
+	waypoint = nodes[clampi(int(nodes.size() * 0.45), 1, maxi(1, nodes.size() - 2))]
 	_place_packs(zone)
 	_place_props(zone)
+	_place_chests(zone)
 
 
 func _layout_nodes() -> void:
 	# Snake across a 5 x 5 sector grid so the route covers most of the map.
-	var cols := 5
-	var rows := 5
+	var cols := 3 if small else 5
+	var rows := 3 if small else 5
 	var sx := float(w - 16) / cols
 	var sy := float(h - 16) / rows
 	var used := {}
@@ -75,9 +85,9 @@ func _layout_nodes() -> void:
 			nodes.append(p)
 			used[Vector2i(c, r)] = true
 	for i in nodes.size():
-		node_radius.append(rng.randi_range(7, 11))
-	node_radius[0] = 8
-	node_radius[nodes.size() - 1] = 15
+		node_radius.append(rng.randi_range(4, 6) if small else rng.randi_range(7, 11))
+	node_radius[0] = 5 if small else 8
+	node_radius[nodes.size() - 1] = 9 if small else 15
 	# Side branches into empty sectors
 	for c in cols:
 		for r in rows:
@@ -230,11 +240,11 @@ func _place_packs(zone: Dictionary) -> void:
 		if not _clearance(x, y, 2):
 			continue
 		var c := Vector2(x, y)
-		if c.distance_to(Vector2(start)) < 16 or c.distance_to(Vector2(finish)) < 18:
+		if c.distance_to(Vector2(start)) < (8 if small else 16) or c.distance_to(Vector2(finish)) < (9 if small else 18):
 			continue
 		var ok := true
 		for p in packs:
-			if p.distance_to(c) < 9.0:
+			if p.distance_to(c) < (5.0 if small else 9.0):
 				ok = false
 				break
 		if ok:
@@ -253,7 +263,7 @@ func _place_props(zone: Dictionary) -> void:
 				if not is_floor(x + d.x, y + d.y):
 					near_wall = true
 			var c := Vector2(x, y)
-			if c.distance_to(Vector2(start)) < 5 or c.distance_to(Vector2(finish)) < 13:
+			if c.distance_to(Vector2(start)) < 5 or c.distance_to(Vector2(finish)) < (8 if small else 13) or c.distance_to(Vector2(waypoint)) < 5:
 				continue
 			var chance := (0.16 if near_wall else 0.012) * float(zone.get("prop_density", 1.0))
 			if rng.randf() > chance:
@@ -282,3 +292,88 @@ func mask_image() -> Image:
 		for x in w:
 			img.set_pixel(x, y, Color(1, 1, 1) if grid[y * w + x] == 1 else Color(0, 0, 0))
 	return img
+
+
+func _place_chests(zone: Dictionary) -> void:
+	var want: int = zone.get("chests", 9)
+	# Dead ends of side branches hold the good ones.
+	var iron := 0
+	for b in branches:
+		if iron >= 3 or chests.size() >= want:
+			break
+		if is_floor(b.x, b.y):
+			chests.append({"pos": (Vector2(b) + Vector2(0.5, 0.5)) * CELL, "iron": true})
+			iron += 1
+	var tries := 0
+	while chests.size() < want and tries < 4000:
+		tries += 1
+		var x := rng.randi_range(5, w - 6)
+		var y := rng.randi_range(5, h - 6)
+		if not _clearance(x, y, 1):
+			continue
+		var c := Vector2(x, y)
+		if c.distance_to(Vector2(start)) < 14 or c.distance_to(Vector2(finish)) < 16 or c.distance_to(Vector2(waypoint)) < 8:
+			continue
+		var ok := true
+		for ch in chests:
+			if (ch.pos / CELL).distance_to(c) < (6.0 if small else 11.0):
+				ok = false
+				break
+		if ok:
+			chests.append({"pos": (c + Vector2(0.5, 0.5)) * CELL, "iron": false})
+
+
+# ------------------------------------------------------------------ village
+
+func _gen_village(zone: Dictionary) -> void:
+	var c := Vector2(w * 0.5, h * 0.5 + 2.0)
+	for y in h:
+		for x in w:
+			var d := Vector2((x - c.x) / 29.0, (y - c.y) / 22.0)
+			var a := d.angle()
+			var rr := 1.0 + 0.06 * sin(a * 5.0 + 1.0) + 0.04 * sin(a * 3.0)
+			if d.length() < rr:
+				grid[y * w + x] = 1
+	_carve_rect(Vector2i(w / 2, int(c.y) - 24), 4, 4)
+	_seal_border()
+	var cx := w / 2
+	var cy := int(c.y)
+	start = Vector2i(cx, cy + 14)
+	finish = Vector2i(cx, cy - 25)
+	waypoint = Vector2i(cx, cy + 8)
+	nodes = [start, Vector2i(cx, cy), finish]
+	var P := func(dx: float, dy: float) -> Vector2: return (c + Vector2(dx, dy) + Vector2(0.5, 0.5)) * CELL
+	pois = {
+		"smith": P.call(-15, -2), "mystic": P.call(15, -2), "elder": P.call(0, -11),
+		"stash": P.call(-8, 4), "waypoint": P.call(0, 8), "start": P.call(0, 14),
+		"door": P.call(-23.5, 12.5),
+	}
+	var add := func(kind: String, dx: float, dy: float) -> void:
+		props.append({"kind": kind, "pos": P.call(dx, dy), "seed": rng.randi()})
+	add.call("hut", -22, -10)
+	add.call("hut", 22, -10)
+	add.call("hut", -20, 12)
+	add.call("hut", 20, 12)
+	add.call("stall", -15, -5)
+	add.call("stall", 15, -5)
+	add.call("bonfire", 0, 0)
+	add.call("well", 9, 9)
+	add.call("banner", -3, -14)
+	add.call("banner", 3, -14)
+	add.call("brazier", -3, -24)
+	add.call("brazier", 3, -24)
+	for q in [[-18, -4], [-12, -4], [18, -4], [12, -5], [-16, 1], [16, 1]]:
+		add.call(["barrel", "crate"][rng.randi() % 2], q[0], q[1])
+	for g in [[-26, 6], [-25, 8], [-27, 9], [-24, 10]]:
+		add.call("grave", g[0], g[1])
+	for y in range(3, h - 3):
+		for x in range(3, w - 3):
+			if not is_floor(x, y):
+				continue
+			var near_wall := false
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if not is_floor(x + d.x, y + d.y):
+					near_wall = true
+			if not near_wall or Vector2(x, y).distance_to(Vector2(finish)) < 6 or rng.randf() > 0.16:
+				continue
+			add.call(["pine", "pine", "dead_tree", "stump", "rock"][rng.randi() % 5], x - c.x + rng.randf_range(0.2, 0.8), y - c.y + rng.randf_range(0.2, 0.8))

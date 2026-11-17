@@ -30,11 +30,20 @@ var show_bar_t := 0.0
 var _seed := 0.0
 var home := Vector2.ZERO
 var exploded := false
+var variant := ""
+var zone_idx := 0
+var region := 0
+var tint := Color.WHITE
+var emerge_t := 0.0
+var wander_dir := Vector2.ZERO
+var _wander_t := 0.0
 
 
 func setup(k: String, hp_mult: float, dmg_mult: float) -> void:
-	kind = k
-	var d: Dictionary = Data.ENEMIES[k]
+	var d: Dictionary = Data.enemy_def(k)
+	variant = k
+	kind = d.get("arch", k)
+	tint = d.get("tint", Color.WHITE)
 	display_name = d.name
 	max_hp = float(d.hp) * hp_mult
 	hp = max_hp
@@ -45,7 +54,7 @@ func setup(k: String, hp_mult: float, dmg_mult: float) -> void:
 	attack_range = d.range
 	windup = d.windup
 	attack_cd = d.cd
-	heavy = k == "brute"
+	heavy = kind == "brute"
 	_seed = randf() * 100.0
 	cd = randf_range(0.2, 1.0)
 	anim = randf() * 10.0
@@ -104,8 +113,11 @@ func update(dt: float) -> void:
 	show_bar_t = maxf(0.0, show_bar_t - dt)
 	if dead:
 		return
+	if emerge_t > 0.0:
+		_update_emerge(dt)
+		return
 	if sleeping:
-		integrate(dt, Vector2.ZERO)
+		_wander(dt)
 		queue_redraw()
 		glow.queue_redraw()
 		return
@@ -114,7 +126,7 @@ func update(dt: float) -> void:
 	if _retarget <= 0.0 or not is_instance_valid(target) or target.dead:
 		_retarget = 0.5
 		target = world.nearest_ally(global_position, 1500.0)
-		if target == null and world.player and not world.player.dead and world.player.global_position.distance_to(global_position) > 1900.0:
+		if target == null and world.player and not world.player.dead and world.player.global_position.distance_to(global_position) > 1100.0:
 			drop_aggro()
 	if affix == "Molten":
 		_pool_t -= dt
@@ -132,6 +144,49 @@ func update(dt: float) -> void:
 		integrate(dt, Vector2.ZERO)
 	else:
 		_think(dt)
+	queue_redraw()
+	glow.queue_redraw()
+
+
+## Unaware enemies mill about near where they stand instead of freezing.
+func _wander(dt: float) -> void:
+	if is_champion or pack == 999 or pack < 0:
+		integrate(dt, Vector2.ZERO)
+		return
+	if home == Vector2.ZERO:
+		home = global_position
+	_wander_t -= dt
+	if _wander_t <= 0.0:
+		_wander_t = randf_range(1.5, 4.5)
+		wander_dir = Vector2.from_angle(randf() * TAU) if randf() < 0.55 else Vector2.ZERO
+	if global_position.distance_to(home) > 150.0:
+		wander_dir = (home - global_position).normalized()
+	if wander_dir.x != 0.0:
+		facing = Vector2(signf(wander_dir.x), 0)
+	integrate(dt, wander_dir * speed * 0.28)
+
+
+## Rising out of the ground: harmless and untargetable until it is up.
+func start_emerge() -> void:
+	emerge_t = 0.9
+	sleeping = false
+	state = "chase"
+	home = global_position
+	scale = Vector2(1.0, 0.2)
+	modulate.a = 0.0
+
+
+func _update_emerge(dt: float) -> void:
+	emerge_t -= dt
+	var k := clampf(1.0 - emerge_t / 0.9, 0.0, 1.0)
+	scale = Vector2(1.0, lerpf(0.2, 1.0, k))
+	modulate.a = clampf(k * 2.5, 0.0, 1.0)
+	if randf() < dt * 22.0:
+		world.smoke_fx.burst(global_position, 2, Color(0.28, 0.2, 0.14, 0.9), 30, 120, 0.7, 5.0, Particles.DEBRIS, TAU, 0.0, 3.0, 260.0)
+	if emerge_t <= 0.0:
+		scale = Vector2.ONE
+		modulate.a = 1.0
+		world.shake(2.0)
 	queue_redraw()
 	glow.queue_redraw()
 
@@ -297,6 +352,8 @@ func blood_color() -> Color:
 
 func body_color(base: Color) -> Color:
 	var c := base
+	if tint != Color.WHITE:
+		c = Color(clampf(c.r * tint.r + (tint.r - 1.0) * 0.06, 0.0, 2.0), clampf(c.g * tint.g + (tint.g - 1.0) * 0.06, 0.0, 2.0), clampf(c.b * tint.b + (tint.b - 1.0) * 0.06, 0.0, 2.0), c.a)
 	if state == "windup":
 		c = c.lerp(Color(0.5, 0.15, 0.08), 0.35 + 0.25 * sin(anim * 30.0))
 	return shade(c)
@@ -306,7 +363,7 @@ func _draw() -> void:
 	draw_shadow(1.0)
 	var s := scale_mult
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(facing.x * s, s))
-	var walk := sin(anim * (speed / 9.0)) if state == "chase" and not sleeping and not is_stunned() else 0.0
+	var walk := sin(anim * (speed / 9.0)) if (state == "chase" and not sleeping and not is_stunned()) or (sleeping and wander_dir != Vector2.ZERO) else 0.0
 	match kind:
 		"husk": _draw_husk(walk)
 		"hound": _draw_hound(walk)

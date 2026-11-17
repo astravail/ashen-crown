@@ -23,6 +23,7 @@ config/icon="res://icon.svg"
 
 Game="*res://scripts/autoload/game.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
+Voice="*res://scripts/autoload/voice.gd"
 
 [display]
 

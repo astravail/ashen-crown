@@ -1,7 +1,9 @@
 extends Node
 ## Global state: settings, input map, fonts, theme and the current run.
 
-const VERSION := "1.0.0"
+## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
+## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
+const VERSION := "0.3.0"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -30,9 +32,18 @@ var settings := {
 	"numbers": true,
 	"gore": true,
 	"fullscreen": false,
+	"quality": 2,       # 0 Low, 1 Medium, 2 High, 3 Ultra
+	"glow": true,
+	"msaa": 2,          # 0 off, 1 2x, 2 4x, 3 8x
+	"vsync": true,
+	"fps_cap": 0,       # 0 = unlimited
+	"voice": true,
+	"subtitles": true,
+	"fps_show": false,
+	"fps_corner": 1,    # 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
 }
 
-var records := {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0}
+var records := {"runs": 0, "wins": 0, "best_zone": 0, "fastest": 0.0, "fallen": 0, "fallen_best_level": 0}
 
 # Current run
 var class_id := "knight"
@@ -40,6 +51,47 @@ var zone_index := 0
 var fragments: Array[String] = []
 var stats := {}
 var using_gamepad := false
+
+# Persistent character state for the run
+signal gear_changed
+signal settings_changed
+signal quest_ready(title: String)
+signal quests_changed
+signal quest_accepted(id: String)
+
+const INV_SIZE := 30
+const STASH_SIZE := 60
+const DIFF_NAMES := ["Wanderer", "Pilgrim", "Survivor", "Veteran", "Hardened", "Ashbound", "Scorched", "Cinderborn", "Marked", "Cursed",
+	"Damned", "Wretched", "Forsaken", "Ruinous", "Infernal", "Abyssal", "Tormented", "Condemned", "Annihilation", "Oblivion"]
+## Twenty steps. Index 2 (Survivor) is the baseline: 1.0 life and damage. Each step up gives more xp, gold and magic find.
+var DIFFICULTIES: Array = _make_diffs()
+
+
+func _make_diffs() -> Array:
+	var out: Array = []
+	for i in DIFF_NAMES.size():
+		var k := i - 2
+		out.append({"name": DIFF_NAMES[i], "hp": pow(1.14, k), "dmg": pow(1.085, k),
+			"xp": maxf(0.8, 1.0 + 0.12 * k), "gold": maxf(0.85, 1.0 + 0.1 * k), "mf": maxf(0.0, 3.5 * k)})
+	return out
+
+var gold := 0
+var inv: Array = []
+var stash: Array = []
+var equipment := {}
+var gear := {}
+var quests := {}  # id -> {"s": 1 active | 2 ready | 3 done, "p": progress}
+var waypoints := {}
+var zone_state := {}
+var zone_seeds := {}
+var max_zone := 0
+var difficulty := 2
+var potion_cd := 0.0
+var stock := {}
+var stock_dirty := true
+var hero_name := "Nameless"
+var acts_seen := {}
+var look := {"accent": 0, "skin": 0, "hair": 0}
 
 
 func _ready() -> void:
@@ -52,12 +104,250 @@ func _ready() -> void:
 
 
 func new_run(cls: String) -> void:
+	char_id = "c%d" % int(Time.get_unix_time_from_system())
+	world_seed = randi()
+	player_state = {}
 	class_id = cls
 	zone_index = 0
 	fragments.clear()
 	stats = {"kills": 0, "time": 0.0, "damage_dealt": 0.0, "damage_taken": 0.0, "level": 1, "elites": 0}
+	gold = 0
+	inv = []
+	inv.resize(INV_SIZE)
+	stash = load_stash()
+	equipment = {}
+	gear = {}
+	quests = {}
+	waypoints = {"village": true, "g0": true}
+	zone_state = {}
+	zone_seeds = {}
+	max_zone = 0
+	acts_seen = {}
+	markers = []
+	in_run = true
+	diff_cd = 0.0
+	potion_cd = 0.0
+	stock = {}
+	stock_dirty = true
 	records.runs += 1
 	save_records()
+
+
+const ACCENTS := [Color(0.38, 0.09, 0.06), Color(0.1, 0.22, 0.4), Color(0.12, 0.3, 0.16), Color(0.35, 0.28, 0.08), Color(0.28, 0.1, 0.34), Color(0.3, 0.3, 0.32)]
+const ACCENT_NAMES := ["Ember red", "Dusk blue", "Moss green", "Old gold", "Violet", "Ash grey"]
+const SKINS := [Color(0.55, 0.45, 0.4), Color(0.72, 0.58, 0.48), Color(0.42, 0.32, 0.27), Color(0.3, 0.22, 0.19), Color(0.68, 0.7, 0.68)]
+const HAIRS := [Color(0.12, 0.05, 0.04), Color(0.4, 0.25, 0.12), Color(0.75, 0.7, 0.6), Color(0.05, 0.05, 0.06), Color(0.55, 0.12, 0.08)]
+
+
+func beta_label() -> String:
+	return "BETA  %s" % VERSION
+
+
+var in_run := false
+var markers: Array = []  # map markers placed by the player, in world pixels
+const MAX_MARKERS := 5
+var char_id := ""
+var world_seed := 0
+var player_state := {}
+var hardcore := false
+## Hardcore: one life. In return, everything comes a bit faster.
+const HC_PERKS := {"xp": 1.25, "gold": 1.2, "mf": 20.0}
+var diff_cd := 0.0
+const DIFF_COOLDOWN := 45.0
+
+
+## Difficulty moves one step at a time, with a wait in between, like swapping in the lobby: no big leaps mid-fight.
+func change_difficulty(delta: int) -> bool:
+	var target := clampi(difficulty + signi(delta), 0, DIFFICULTIES.size() - 1)
+	if target == difficulty or diff_cd > 0.0:
+		return false
+	difficulty = target
+	diff_cd = DIFF_COOLDOWN
+	return true
+
+
+func accent_color() -> Color:
+	return ACCENTS[clampi(int(look.accent), 0, ACCENTS.size() - 1)]
+
+
+func skin_color() -> Color:
+	return SKINS[clampi(int(look.skin), 0, SKINS.size() - 1)]
+
+
+func hair_color() -> Color:
+	return HAIRS[clampi(int(look.hair), 0, HAIRS.size() - 1)]
+
+
+func zs(i: int) -> Dictionary:
+	if not zone_state.has(i):
+		zone_state[i] = {"champ_dead": false, "claimed": false, "boss_dead": false, "chests": {}, "visited": false}
+	return zone_state[i]
+
+
+func diff() -> Dictionary:
+	var d: Dictionary = DIFFICULTIES[difficulty]
+	if not hardcore:
+		return d
+	var h := d.duplicate()
+	h.xp = float(d.xp) * float(HC_PERKS.xp)
+	h.gold = float(d.gold) * float(HC_PERKS.gold)
+	h.mf = float(d.mf) + float(HC_PERKS.mf)
+	return h
+
+
+func unlock(id: String) -> bool:
+	if waypoints.has(id):
+		return false
+	waypoints[id] = true
+	return true
+
+
+# ------------------------------------------------------------------ gold and items
+
+func add_gold(n: int) -> void:
+	gold += n
+	stat_add("gold_earned", n)
+
+
+func gear_stat(k: String) -> float:
+	return float(gear.get(k, 0.0))
+
+
+func recalc_gear() -> void:
+	gear = Items.totals(equipment)
+	gear_changed.emit()
+
+
+func add_to(list: Array, item: Dictionary) -> bool:
+	for i in list.size():
+		if list[i] == null:
+			list[i] = item
+			return true
+	return false
+
+
+func add_item(item: Dictionary) -> bool:
+	var ok := add_to(inv, item)
+	if ok:
+		stat_add("items_r%d" % int(item.rarity), 1)
+	return ok
+
+
+func free_slots(list: Array) -> int:
+	var n := 0
+	for x in list:
+		if x == null:
+			n += 1
+	return n
+
+
+## Swap the backpack item at `idx` with whatever is worn in its slot.
+func equip(idx: int) -> void:
+	var item: Dictionary = inv[idx]
+	var old: Variant = equipment.get(item.slot)
+	equipment[item.slot] = item
+	inv[idx] = old
+	recalc_gear()
+
+
+func unequip(slot: String) -> bool:
+	if not equipment.has(slot) or equipment[slot] == null:
+		return false
+	if not add_item(equipment[slot]):
+		return false
+	equipment.erase(slot)
+	recalc_gear()
+	return true
+
+
+func repair_all_cost() -> int:
+	var c := 0
+	for s in equipment.keys():
+		c += Items.repair_cost(equipment[s])
+	return c
+
+
+func repair_all() -> int:
+	var cost := repair_all_cost()
+	if cost > gold:
+		return 0
+	gold -= cost
+	for s in equipment.keys():
+		equipment[s].dur = equipment[s].dur_max
+	recalc_gear()
+	return cost
+
+
+## Dying chips away at everything you wear.
+func wear_on_death() -> void:
+	for s in equipment.keys():
+		var it: Dictionary = equipment[s]
+		it.dur = maxi(0, int(it.dur) - maxi(1, int(it.dur_max * 0.1)))
+	recalc_gear()
+
+
+func vendor_stock(kind: String) -> Array:
+	if stock_dirty or not stock.has(kind):
+		stock[kind] = Items.vendor_stock(kind, 1 + max_zone * 4 + randi_range(0, 2))
+		if kind == "mystic":
+			stock_dirty = false
+	return stock[kind]
+
+
+# ------------------------------------------------------------------ quests
+
+func quest_status(id: String) -> int:
+	return int((quests.get(id, {"s": 0}) as Dictionary).s)
+
+
+func quest_available(q: Dictionary) -> bool:
+	if quest_status(q.id) != 0:
+		return false
+	if q.get("req", "") != "" and quest_status(q.req) != 3:
+		return false
+	var z: int = q.zone
+	if z > Data.LAST_ZONE:
+		return true
+	# The road to a zone opens when the previous zone's fragment is claimed (zone 0 after the cellar).
+	if z == 0:
+		return quest_status("story_0") == 3
+	return bool(zs(z - 1).claimed)
+
+
+func quest_accept(id: String) -> void:
+	quests[id] = {"s": 1, "p": 0}
+	quest_accepted.emit(id)
+	quests_changed.emit()
+
+
+func quest_advance(type: String, zone: int, n := 1) -> void:
+	for q in Data.QUESTS:
+		var st: Dictionary = quests.get(q.id, {})
+		if st.is_empty() or int(st.s) != 1 or q.type != type or int(q.zone) != zone:
+			continue
+		st.p = mini(int(q.goal), int(st.p) + n)
+		if int(st.p) >= int(q.goal):
+			st.s = 2
+			quest_ready.emit(q.title)
+	quests_changed.emit()
+
+
+func quest_active_for(type: String, zone: int) -> bool:
+	for q in Data.QUESTS:
+		if q.type == type and int(q.zone) == zone and quest_status(q.id) == 1:
+			return true
+	return false
+
+
+## "!" when something can be accepted, "?" when something can be handed in.
+func quest_marker() -> String:
+	var m := ""
+	for q in Data.QUESTS:
+		if quest_status(q.id) == 2:
+			return "?"
+		if quest_available(q):
+			m = "!"
+	return m
 
 
 # ------------------------------------------------------------------ settings
@@ -77,8 +367,31 @@ func save_settings() -> void:
 	cfg.save(SETTINGS_PATH)
 
 
+const QUALITY_NAMES := ["Low", "Medium", "High", "Ultra"]
+const QUALITY_FACTOR := [0.15, 0.4, 0.75, 1.0]
+
+
+## 0..1: scales ambient particles, effect buffers and similar costs. Low is meant for weak PCs.
+func quality_factor() -> float:
+	return QUALITY_FACTOR[clampi(int(settings.quality), 0, 3)]
+
+
+func apply_preset(q: int) -> void:
+	settings.quality = q
+	settings.glow = q >= 1
+	settings.msaa = [0, 0, 2, 3][q]
+	settings.fps_cap = [60, 0, 0, 0][q]
+	apply_settings()
+
+
 func apply_settings() -> void:
 	Sfx.set_volumes(settings.master, settings.music, settings.sfx)
+	Engine.max_fps = int(settings.fps_cap)
+	if not DisplayServer.get_name().begins_with("headless"):
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if settings.vsync else DisplayServer.VSYNC_DISABLED)
+		if get_viewport():
+			get_viewport().msaa_2d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X, Viewport.MSAA_8X][clampi(int(settings.msaa), 0, 3)]
+	settings_changed.emit()
 	if not DisplayServer.get_name().begins_with("headless"):
 		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if settings.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != want:
@@ -114,6 +427,11 @@ func _setup_input() -> void:
 		"flask": [KEY_F],
 		"pause": [KEY_ESCAPE],
 		"map": [KEY_TAB],
+		"interact": [KEY_G],
+		"inventory": [KEY_I],
+		"quests": [KEY_J],
+		"skills": [KEY_K],
+		"recall": [KEY_T],
 	}
 	for action in defs.keys():
 		_ensure(action)
@@ -136,6 +454,11 @@ func _setup_input() -> void:
 	_button("flask", JOY_BUTTON_LEFT_SHOULDER)
 	_button("pause", JOY_BUTTON_START)
 	_button("map", JOY_BUTTON_BACK)
+	_button("interact", JOY_BUTTON_B)
+	_button("inventory", JOY_BUTTON_DPAD_UP)
+	_button("quests", JOY_BUTTON_DPAD_LEFT)
+	_button("skills", JOY_BUTTON_DPAD_RIGHT)
+	_button("recall", JOY_BUTTON_DPAD_DOWN)
 	for a in ["move_up", "move_down", "move_left", "move_right"]:
 		InputMap.action_set_deadzone(a, 0.25)
 
@@ -299,3 +622,180 @@ func _knob(c: Color) -> ImageTexture:
 func fmt_time(t: float) -> String:
 	var s := int(t)
 	return "%d:%02d" % [s / 60, s % 60]
+
+
+# ------------------------------------------------------------------ saved characters
+
+const SAVE_DIR := "user://characters"
+const STASH_PATH := "user://stash.save"
+const STASH_HC_PATH := "user://stash_hardcore.save"
+const FALLEN_PATH := "user://fallen.save"
+var last_killer := "the ash"
+
+
+## Hardcore heroes keep a stash of their own, as in Diablo 3.
+func _stash_path() -> String:
+	return STASH_HC_PATH if hardcore else STASH_PATH
+
+
+func load_stash() -> Array:
+	var out: Array = []
+	if FileAccess.file_exists(_stash_path()):
+		var f := FileAccess.open(_stash_path(), FileAccess.READ)
+		var v: Variant = f.get_var(false)
+		if v is Array:
+			out = v
+	out.resize(STASH_SIZE)
+	return out
+
+
+func save_character() -> void:
+	if char_id == "" or not in_run:
+		return
+	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+	var d := {"v": 1, "name": hero_name, "cls": class_id, "hardcore": hardcore, "difficulty": difficulty, "look": look,
+		"gold": gold, "inv": inv, "equipment": equipment, "quests": quests, "waypoints": waypoints, "zone_state": zone_state,
+		"max_zone": max_zone, "acts_seen": acts_seen, "stats": stats, "fragments": Array(fragments), "world_seed": world_seed,
+		"player": player_state, "markers": markers, "saved": int(Time.get_unix_time_from_system())}
+	var f := FileAccess.open("%s/%s.save" % [SAVE_DIR, char_id], FileAccess.WRITE)
+	if f:
+		f.store_var(d, false)
+	var sf := FileAccess.open(_stash_path(), FileAccess.WRITE)
+	if sf:
+		sf.store_var(stash, false)
+
+
+func _read_save(id: String) -> Dictionary:
+	var path := "%s/%s.save" % [SAVE_DIR, id]
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	var v: Variant = f.get_var(false)
+	return v if v is Dictionary else {}
+
+
+## Short summaries for the character list, newest first.
+func list_characters() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(SAVE_DIR)
+	if dir == null:
+		return out
+	for fn in dir.get_files():
+		if not fn.ends_with(".save"):
+			continue
+		var id := fn.get_basename()
+		var d := _read_save(id)
+		if d.is_empty():
+			continue
+		out.append({"id": id, "name": d.name, "cls": d.cls, "hardcore": d.get("hardcore", false), "difficulty": d.get("difficulty", 2),
+			"level": int((d.get("player", {}) as Dictionary).get("level", 1)), "saved": d.get("saved", 0), "max_zone": d.get("max_zone", 0)})
+	out.sort_custom(func(a, b): return a.saved > b.saved)
+	return out
+
+
+func load_character(id: String) -> bool:
+	var d := _read_save(id)
+	if d.is_empty():
+		return false
+	char_id = id
+	hero_name = d.name
+	class_id = d.cls
+	hardcore = d.get("hardcore", false)
+	difficulty = int(d.get("difficulty", 2))
+	look = d.get("look", look)
+	gold = int(d.gold)
+	inv = d.inv
+	inv.resize(INV_SIZE)
+	stash = load_stash()
+	equipment = d.equipment
+	quests = d.quests
+	waypoints = d.waypoints
+	zone_state = d.zone_state
+	max_zone = int(d.max_zone)
+	acts_seen = d.acts_seen
+	stats = d.stats
+	fragments.assign(d.fragments)
+	world_seed = int(d.world_seed)
+	player_state = d.player
+	markers = d.get("markers", [])
+	stock = {}
+	stock_dirty = true
+	potion_cd = 0.0
+	diff_cd = 0.0
+	in_run = true
+	var top := 0
+	for list in [inv, stash, equipment.values()]:
+		for it in list:
+			if it != null:
+				top = maxi(top, int(it.uid))
+	Items._uid = maxi(Items._uid, top + 1)
+	recalc_gear()
+	return true
+
+
+func delete_character(id: String) -> void:
+	DirAccess.remove_absolute("%s/%s.save" % [SAVE_DIR, id])
+
+
+# ------------------------------------------------------------------ hall of the fallen
+
+func fallen_list() -> Array:
+	if not FileAccess.file_exists(FALLEN_PATH):
+		return []
+	var f := FileAccess.open(FALLEN_PATH, FileAccess.READ)
+	var v: Variant = f.get_var(false)
+	return v if v is Array else []
+
+
+func record_fallen(zone_name: String) -> void:
+	var list := fallen_list()
+	list.push_front({"name": hero_name, "cls": class_id, "level": int(stats.level), "zone": zone_name, "killer": last_killer,
+		"difficulty": difficulty, "time": float(stats.time), "kills": int(stats.kills), "date": int(Time.get_unix_time_from_system())})
+	list.resize(mini(list.size(), 100))
+	var f := FileAccess.open(FALLEN_PATH, FileAccess.WRITE)
+	if f:
+		f.store_var(list, false)
+
+
+# ------------------------------------------------------------------ statistics
+
+const LIFETIME_PATH := "user://lifetime.save"
+var lifetime := {}
+var _life_loaded := false
+
+
+func _life() -> Dictionary:
+	if not _life_loaded:
+		_life_loaded = true
+		if FileAccess.file_exists(LIFETIME_PATH):
+			var f := FileAccess.open(LIFETIME_PATH, FileAccess.READ)
+			var v: Variant = f.get_var(false)
+			if v is Dictionary:
+				lifetime = v
+	return lifetime
+
+
+## Counts toward both this character and the lifetime totals.
+func stat_add(key: String, n: float, sub := "") -> void:
+	var l := _life()
+	if sub == "":
+		l[key] = float(l.get(key, 0.0)) + n
+		stats[key] = float(stats.get(key, 0.0)) + n
+		return
+	var d: Dictionary = l.get(key, {})
+	d[sub] = float(d.get(sub, 0.0)) + n
+	l[key] = d
+	var rd: Dictionary = stats.get(key, {})
+	rd[sub] = float(rd.get(sub, 0.0)) + n
+	stats[key] = rd
+
+
+func stat_max(key: String, v: float) -> void:
+	var l := _life()
+	l[key] = maxf(float(l.get(key, 0.0)), v)
+
+
+func save_lifetime() -> void:
+	var f := FileAccess.open(LIFETIME_PATH, FileAccess.WRITE)
+	if f:
+		f.store_var(_life(), false)

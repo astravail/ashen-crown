@@ -16,7 +16,7 @@ var shot_t := 3.0
 var shot_n := 0
 var last_pos := Vector2.ZERO
 var stuck_t := 0.0
-var map_ref: MapGen
+var map_ref: WorldMap
 var done := false
 var ending_t := 0.0
 var jitter_t := 0.0
@@ -34,8 +34,17 @@ func _ready() -> void:
 			shot_dir = a.substr(8)
 	await get_tree().create_timer(0.5).timeout
 	Game.new_run(cls)
+	Game.hero_name = "Bot"
 	main._carry = {}
-	main._load_zone(start_zone)
+	# Open the road to the start zone and take its hunt, as a player who had followed the story would have.
+	Game.quests["story_0"] = {"s": 3, "p": 1}
+	for z in start_zone:
+		Game.zs(z).claimed = true
+		Game.zs(z).champ_dead = true
+		Game.unlock("z%d" % z)
+	Game.quest_accept("story_%d" % (start_zone + 1))
+	Game.quest_accept("%s_cull" % Data.ZONES[start_zone].id)
+	await main._load_zone(start_zone)
 
 
 func _process(dt: float) -> void:
@@ -105,7 +114,7 @@ func _build_astar(w: World) -> void:
 
 func _goal(w: World) -> Vector2:
 	for p in w.interactives:
-		if not p.used and (p.kind == "altar" or p.kind == "portal"):
+		if not p.used and p.kind == "altar":
 			return p.global_position
 	return w.arena_center
 

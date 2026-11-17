@@ -12,7 +12,7 @@ var ash := 0.0
 var ash_full_t := 0.0
 var level := 1
 var xp := 0.0
-var xp_next := 25.0
+var xp_next := 40.0
 var pending_levels := 0
 var mods := {}
 var flask := 3
@@ -96,7 +96,7 @@ func frag(id: String) -> bool:
 
 
 func dmg_mult() -> float:
-	var m := 1.0 + 0.12 * mod("ferocity")
+	var m := 1.0 + 0.12 * mod("ferocity") + Game.gear_stat("dmg") / 100.0
 	if frag("hunger"):
 		m += 0.3
 	if buffs.has("fury"):
@@ -109,7 +109,7 @@ func dmg_mult() -> float:
 
 
 func cd_rate() -> float:
-	var r := 1.0 + 0.1 * mod("alacrity")
+	var r := 1.0 + 0.1 * mod("alacrity") + minf(0.6, Game.gear_stat("cdr") / 100.0)
 	if frag("haste"):
 		r += 0.25
 	if buffs.has("haste"):
@@ -118,7 +118,7 @@ func cd_rate() -> float:
 
 
 func speed() -> float:
-	var s := base_speed * (1.0 + 0.1 * mod("swiftness"))
+	var s := base_speed * (1.0 + 0.1 * mod("swiftness") + minf(0.35, Game.gear_stat("speed") / 100.0))
 	if frag("iron"):
 		s *= 0.85
 	if buffs.has("haste"):
@@ -129,19 +129,24 @@ func speed() -> float:
 
 
 func crit_chance() -> float:
-	return 0.05 + 0.06 * mod("precision") + (0.15 if frag("ruin") else 0.0)
+	return 0.05 + 0.06 * mod("precision") + Game.gear_stat("crit") / 100.0 + (0.15 if frag("ruin") else 0.0)
 
 
 func crit_mult() -> float:
-	return 1.5 + (0.5 if frag("ruin") else 0.0)
+	return 1.5 + Game.gear_stat("critd") / 100.0 + (0.5 if frag("ruin") else 0.0)
 
 
 func area_mult() -> float:
 	return 1.0 + 0.15 * mod("reach")
 
 
+## The potion is no longer a stack of charges: one draught, reusable on a timer, as in Diablo 3.
 func flask_max() -> int:
-	return 3 + mod("flaskmaker") - (1 if frag("ruin") else 0)
+	return 1
+
+
+func potion_cooldown() -> float:
+	return maxf(8.0, 30.0 - 3.0 * mod("flaskmaker") - 5.0 * Game.gear_stat("flask") + (6.0 if frag("ruin") else 0.0))
 
 
 func ult_duration(base: float) -> float:
@@ -150,14 +155,14 @@ func ult_duration(base: float) -> float:
 
 func recompute() -> void:
 	var ratio := hp / max_hp if max_hp > 0.0 else 1.0
-	var m := base_hp * (1.0 + 0.2 * mod("vigor"))
+	var m := base_hp * (1.0 + 0.2 * mod("vigor")) + Game.gear_stat("hp")
 	if frag("hunger"):
 		m *= 0.8
 	if frag("iron"):
 		m *= 1.4
 	max_hp = m
 	hp = clampf(ratio * max_hp, 1.0, max_hp)
-	armor = base_armor + (0.1 if frag("iron") else 0.0)
+	armor = minf(Items.MAX_ARMOR, base_armor + (0.1 if frag("iron") else 0.0) + Game.gear_stat("armor") / 100.0)
 	flask = mini(flask, flask_max())
 
 
@@ -187,9 +192,9 @@ func heal(amount: float, show := true) -> void:
 		world.texts.add(global_position + Vector2(0, -50), hp - before, Color(0.5, 1.0, 0.5), false)
 
 
+## Every so many kills, the draught is ready sooner.
 func add_flask_charge() -> void:
-	if flask < flask_max():
-		flask += 1
+	Game.potion_cd = maxf(0.0, Game.potion_cd - 6.0)
 
 
 func on_kill(e: Enemy, gained_xp: float) -> void:
@@ -198,13 +203,13 @@ func on_kill(e: Enemy, gained_xp: float) -> void:
 		gain = 14.0
 	if e.is_champion:
 		gain = 40.0
-	gain *= pow(1.25, mod("ashborn")) * (2.0 if frag("pyre") else 1.0)
+	gain *= pow(1.25, mod("ashborn")) * (2.0 if frag("pyre") else 1.0) * (1.0 + Game.gear_stat("ash") / 100.0)
 	if ult_t <= 0.0:
 		ash = minf(100.0, ash + gain)
 	if cls == "gravecaller" and e.global_position.distance_to(global_position) < 450.0:
 		resource = minf(res_max, resource + 9.0)
-	if mod("leech") > 0:
-		heal(max_hp * 0.015 * mod("leech"), false)
+	if mod("leech") > 0 or Game.gear_stat("leech") > 0.0:
+		heal(max_hp * (0.015 * mod("leech") + Game.gear_stat("leech") / 100.0), false)
 	gain_xp(gained_xp)
 
 
@@ -213,13 +218,14 @@ func gain_xp(amount: float) -> void:
 	while xp >= xp_next:
 		xp -= xp_next
 		level += 1
-		xp_next = 14.0 + 11.0 * level
+		xp_next = Data.xp_for_level(level)
 		pending_levels += 1
 		Game.stats.level = level
 		heal(max_hp * 0.25, false)
 		world.glow_fx.burst(global_position, 30, Color(3.0, 1.4, 0.4), 80, 320, 0.8, 3.0, Particles.SPARK)
 		world.glow_fx.ring(global_position, 120.0, Color(3.0, 1.2, 0.3, 0.8), 0.6)
 		Sfx.play("levelup", -2.0)
+		Voice.bark("player", "levelup", "", 10.0)
 		world.level_up.emit()
 
 
@@ -233,6 +239,7 @@ func revive() -> void:
 	slow_t = 0.0
 	invuln_t = 2.0
 	flask = flask_max()
+	Game.potion_cd = 0.0
 	overheat_t = 0.0
 	if cls == "pyrewitch":
 		resource = 0.0
@@ -240,7 +247,7 @@ func revive() -> void:
 
 func export_state() -> Dictionary:
 	return {"hp": hp / max_hp, "resource": resource, "ash": ash, "level": level, "xp": xp, "xp_next": xp_next,
-		"mods": mods.duplicate(), "flask": flask, "step_charges": step_charges}
+		"mods": mods.duplicate(), "flask": flask, "step_charges": step_charges, "points": pending_levels}
 
 
 func import_state(s: Dictionary) -> void:
@@ -252,6 +259,7 @@ func import_state(s: Dictionary) -> void:
 	ash = s.ash
 	flask = s.flask
 	step_charges = s.step_charges
+	pending_levels = int(s.get("points", 0))
 	recompute()
 	hp = maxf(max_hp * 0.5, max_hp * float(s.hp))
 
@@ -398,8 +406,8 @@ func ash_cursed() -> bool:
 
 
 func _update_regen(dt: float) -> void:
-	if mod("second_wind") > 0 and not frag("thorns"):
-		hp = minf(max_hp, hp + max_hp * 0.01 * mod("second_wind") * dt)
+	if (mod("second_wind") > 0 or Game.gear_stat("regen") > 0.0) and not frag("thorns"):
+		hp = minf(max_hp, hp + max_hp * (0.01 * mod("second_wind") + Game.gear_stat("regen") / 100.0) * dt)
 
 
 # ---------------------------------------------------------------- input / casting
@@ -426,10 +434,11 @@ func _handle_input() -> void:
 
 
 func _drink() -> void:
-	if flask <= 0 or flask_cd > 0.0 or hp >= max_hp:
+	if Game.potion_cd > 0.0 or flask_cd > 0.0 or hp >= max_hp:
 		return
-	flask -= 1
+	Game.potion_cd = potion_cooldown()
 	flask_cd = 1.0
+	Voice.bark("player", "potion", "", 40.0)
 	heal(max_hp * 0.45 * (1.0 + 0.15 * mod("flaskmaker")))
 	Sfx.play("flask")
 	world.glow_fx.burst(global_position + Vector2(0, -20), 16, Color(2.4, 0.3, 0.25), 40, 160, 0.6, 2.5, Particles.EMBER, TAU, 0.0, 2.0, -100.0)
@@ -880,7 +889,7 @@ func _draw_knight(bob: float, step: float, side: float, a: float) -> void:
 	# Shield arm behind when facing away from shield side
 	var body := PackedVector2Array([Vector2(-13, y), Vector2(13, y), Vector2(16, y - 26), Vector2(-16, y - 26)])
 	draw_colored_polygon(body, _c(steel, a))
-	draw_colored_polygon(PackedVector2Array([Vector2(-6, y), Vector2(6, y), Vector2(5, y - 22), Vector2(-5, y - 22)]), _c(Color(0.38, 0.09, 0.06), a))
+	draw_colored_polygon(PackedVector2Array([Vector2(-6, y), Vector2(6, y), Vector2(5, y - 22), Vector2(-5, y - 22)]), _c(Game.accent_color(), a))
 	draw_circle(Vector2(-16, y - 24), 8.0, _c(Color(0.3, 0.29, 0.3), a), true, -1.0, true)
 	draw_circle(Vector2(16, y - 24), 8.0, _c(Color(0.3, 0.29, 0.3), a), true, -1.0, true)
 	# Helm
@@ -909,7 +918,7 @@ func _draw_gravecaller(bob: float, step: float, side: float, a: float) -> void:
 	var sway := step * 3.0
 	var body := PackedVector2Array([Vector2(-17 + sway, 2), Vector2(17 + sway, 2), Vector2(11, y - 30), Vector2(0, y - 36), Vector2(-11, y - 30)])
 	draw_colored_polygon(body, _c(robe, a))
-	draw_colored_polygon(PackedVector2Array([Vector2(-4 + sway, 2), Vector2(4 + sway, 2), Vector2(3, y - 28), Vector2(-3, y - 28)]), _c(Color(0.22, 0.25, 0.25), a))
+	draw_colored_polygon(PackedVector2Array([Vector2(-4 + sway, 2), Vector2(4 + sway, 2), Vector2(3, y - 28), Vector2(-3, y - 28)]), _c(Game.accent_color().lerp(Color(0.22, 0.25, 0.25), 0.5), a))
 	# Hood
 	var hood := PackedVector2Array([Vector2(-12, y - 30), Vector2(12, y - 30), Vector2(10, y - 48), Vector2(side * 4.0, y - 58), Vector2(-10, y - 48)])
 	draw_colored_polygon(hood, _c(Color(0.16, 0.18, 0.19), a))
@@ -928,9 +937,9 @@ func _draw_witch(bob: float, step: float, side: float, a: float) -> void:
 	var body := PackedVector2Array([Vector2(-16 + sway, 2), Vector2(16 + sway, 2), Vector2(9, y - 30), Vector2(-9, y - 30)])
 	draw_colored_polygon(body, _c(robe, a))
 	draw_colored_polygon(PackedVector2Array([Vector2(-16 + sway, 2), Vector2(16 + sway, 2), Vector2(14 + sway, -4), Vector2(-14 + sway, -4)]), _c(Color(0.1, 0.05, 0.05), a))
-	draw_circle(Vector2(0, y - 36), 8.0, _c(Color(0.55, 0.45, 0.4), a), true, -1.0, true)
+	draw_circle(Vector2(0, y - 36), 8.0, _c(Game.skin_color(), a), true, -1.0, true)
 	# Hair
-	draw_colored_polygon(PackedVector2Array([Vector2(-9, y - 38), Vector2(9, y - 38), Vector2(-side * 14.0, y - 18)]), _c(Color(0.12, 0.05, 0.04), a))
+	draw_colored_polygon(PackedVector2Array([Vector2(-9, y - 38), Vector2(9, y - 38), Vector2(-side * 14.0, y - 18)]), _c(Game.hair_color(), a))
 	# Hat: wide brim and a bent point
 	draw_set_transform(Vector2(0, y - 42), 0.0, Vector2(1.0, 0.35))
 	draw_circle(Vector2.ZERO, 21.0, _c(Color(0.09, 0.06, 0.06), a), true, -1.0, true)
