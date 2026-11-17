@@ -28,7 +28,7 @@ GODOT="${GODOT:-$(command -v godot || true)}"
 [[ -x "$GODOT" ]] || { echo "Godot not found. Set GODOT=/path/to/godot." >&2; exit 1; }
 
 # Point the export preset at the right architecture, then build a single self-contained binary.
-sed -i "s/^binary_format\/architecture=.*/binary_format\/architecture=\"$ARCH\"/" "$GAME/export_presets.cfg"
+sed -i "/^\[preset.0.options\]/,/^\[preset.1\]/ s/^binary_format\/architecture=.*/binary_format\/architecture=\"$ARCH\"/" "$GAME/export_presets.cfg"
 mkdir -p "$GAME/build"
 OUT="$GAME/build/ashen-crown.$ARCH"
 echo "Building $OUT ..."
