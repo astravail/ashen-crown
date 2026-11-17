@@ -1,6 +1,6 @@
 class_name Loot
 extends Node2D
-## Gold and gear lying on the ground. Gold is drawn to you; gear is picked up by walking over it.
+## Gold and gear lying on the ground. Gold is drawn to you; gear is taken by clicking it.
 
 const Ink := preload("res://scripts/fx/ink.gd")
 
@@ -72,23 +72,40 @@ func update(dt: float) -> void:
 				world.texts.add_label(p.global_position + Vector2(0, -56), "+%d gold" % gold, Color(1.0, 0.85, 0.3))
 				Sfx.play("pickup", -10.0, 0.1, 1.5)
 				done = true
-		elif d < p.radius + 30.0 and t > 0.5:
-			if Game.add_item(item):
-				Game.stat_add("found_r%d" % int(item.rarity), 1.0)
-				Sfx.play("pickup", -4.0, 0.1, 0.8)
-				world.texts.add_label(p.global_position + Vector2(0, -56), String(item.name), color())
-				if int(item.rarity) >= 3:
-					Sfx.play("levelup", -4.0)
-					Voice.bark("player", "legendary", "Now that is something.")
-				done = true
-			elif world.full_warn <= 0.0:
-				world.full_warn = 3.0
-				world.texts.add_label(p.global_position + Vector2(0, -56), "Inventory full", Color(1.0, 0.4, 0.3))
 	if t > (60.0 if gold > 0 else 300.0):
 		done = true
 	queue_redraw()
 	glow.queue_redraw()
 	label.queue_redraw()
+
+
+## Whether the cursor is over this piece of gear (its name tag and the thing itself).
+func under_cursor(m: Vector2) -> bool:
+	if gold > 0 or t < 0.4:
+		return false
+	var d := m - global_position
+	return d.x > -58.0 and d.x < 58.0 and d.y > -60.0 and d.y < 16.0
+
+
+## Clicked: take it, if the player is close enough and has room.
+func pick_up() -> void:
+	var p := world.player
+	if p == null or p.dead or done:
+		return
+	if p.global_position.distance_to(global_position) > 340.0:
+		world.texts.add_label(p.global_position + Vector2(0, -56), "Too far away", Color(0.8, 0.75, 0.7))
+		return
+	if Game.add_item(item):
+		Game.stat_add("found_r%d" % int(item.rarity), 1.0)
+		Sfx.play("pickup", -4.0, 0.1, 0.8)
+		world.texts.add_label(p.global_position + Vector2(0, -56), String(item.name), color())
+		if int(item.rarity) >= 3:
+			Sfx.play("levelup", -4.0)
+			Voice.bark("player", "legendary", "Now that is something.")
+		done = true
+	elif world.full_warn <= 0.0:
+		world.full_warn = 3.0
+		world.texts.add_label(p.global_position + Vector2(0, -56), "Inventory full", Color(1.0, 0.4, 0.3))
 
 
 func _bounce() -> float:
@@ -186,6 +203,19 @@ func _draw_label() -> void:
 	var c := color()
 	label.draw_rect(Rect2(p.x - 5, p.y - 14, w + 10, 19), Color(0, 0, 0, 0.55))
 	label.draw_string(f, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, c)
+	if world.hovered_loot == self:
+		label.draw_rect(Rect2(p.x - 5, p.y - 14, w + 10, 19), Color(1, 1, 1, 0.16))
+		label.draw_rect(Rect2(p.x - 5, p.y - 14, w + 10, 19), Color(c.r, c.g, c.b, 0.9), false, 1.5)
+	# better or worse than what is worn: a green arrow up, or a red one down
+	var v := Items.verdict(item, Game.equipment)
+	if v != 0:
+		var ax := p.x + w + 16.0
+		var ay := p.y - 5.0
+		var col := Color(0.05, 0.85, 0.12) if v > 0 else Color(1.0, 0.08, 0.06)
+		var k := -1.0 if v > 0 else 1.0
+		var bob := sin(t * 5.0) * 1.5 * k
+		Ink.tri(label, Vector2(ax - 7.5, ay - 6.0 * k + bob), Vector2(ax + 7.5, ay - 6.0 * k + bob), Vector2(ax, ay + 7.0 * k + bob), Color(0.03, 0.03, 0.03, 0.9))
+		Ink.tri(label, Vector2(ax - 5.5, ay - 4.0 * k + bob), Vector2(ax + 5.5, ay - 4.0 * k + bob), Vector2(ax, ay + 5.0 * k + bob), col)
 
 
 ## A four-pointed glint that flares up and dies away, `rate` times a second. Drawn with the label so

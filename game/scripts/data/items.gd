@@ -169,6 +169,9 @@ static func make(slot: String, rarity: int, ilvl: int) -> Dictionary:
 
 
 static func make_legend(slot: String, ilvl: int, allow_boss := false, key := "") -> Dictionary:
+	# a legendary is never weaker than the hero who finds it: it is at least a few levels above the zone
+	# and above the hero's own level
+	ilvl = maxi(ilvl + 3, int(Game.stats.get("level", 1)) + 2)
 	var opts: Array = []
 	for l in LEGENDS:
 		if key != "":
@@ -275,6 +278,32 @@ static func item_stats(item: Dictionary) -> Dictionary:
 	for m in item.mods:
 		out[m.k] = float(out.get(m.k, 0.0)) + float(m.v)
 	return out
+
+
+## How much a stat is worth when judging whether one piece of gear beats another.
+const RATING_W := {"dmg": 1.0, "hp": 0.15, "armor": 3.0, "speed": 1.2, "crit": 3.0, "critd": 0.5, "cdr": 2.0,
+	"leech": 6.0, "regen": 8.0, "gold": 0.3, "mf": 0.3, "ash": 0.4, "blast": 0.5, "flask": 4.0}
+
+
+static func rating(item: Variant) -> float:
+	if item == null:
+		return 0.0
+	var r := 0.0
+	var s := item_stats(item)
+	for k in s.keys():
+		r += float(s[k]) * float(RATING_W.get(k, 0.5))
+	return r
+
+
+## 1 if `item` beats what is worn in its slot, -1 if it is worse, 0 if about the same.
+static func verdict(item: Dictionary, equipment: Dictionary) -> int:
+	var a := rating(item)
+	var b := rating(equipment.get(item.slot))
+	if a > b * 1.03 + 0.2:
+		return 1
+	if a < b * 0.97 - 0.2:
+		return -1
+	return 0
 
 
 static func totals(equipment: Dictionary) -> Dictionary:

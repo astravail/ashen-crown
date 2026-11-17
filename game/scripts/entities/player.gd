@@ -427,7 +427,7 @@ func _handle_input() -> void:
 		_drink()
 	if Input.is_action_just_pressed("ultimate"):
 		_try_cast(4)
-	if Input.is_action_pressed("attack_1"):
+	if Input.is_action_pressed("attack_1") and world.hovered_loot == null:
 		_try_cast(0)
 	if Input.is_action_pressed("attack_2"):
 		_try_cast(1)

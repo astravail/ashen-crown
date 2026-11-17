@@ -40,6 +40,8 @@ var ambush: Array[Dictionary] = []
 var interact_target: Node
 var interact_text := ""
 var full_warn := 0.0
+## The piece of gear under the cursor, if any. Clicking takes it instead of attacking.
+var hovered_loot: Loot = null
 var recall_t := 0.0
 var recall_cd := 0.0
 var recall_prop: Prop
@@ -938,6 +940,7 @@ func _update_game(dt: float) -> void:
 		p.update(dt)
 	for l in loots:
 		l.update(dt)
+	_update_hover_loot()
 	for n in npcs:
 		n.update(dt)
 	_tend_props(pp, dt)
@@ -1379,6 +1382,24 @@ func _scatter(pos: Vector2) -> Vector2:
 		if is_floor_at(p):
 			return p
 	return pos
+
+
+func _update_hover_loot() -> void:
+	hovered_loot = null
+	if attract or player == null or player.dead or get_tree().paused:
+		return
+	if get_viewport().gui_get_hovered_control() != null:
+		return
+	var m := get_global_mouse_position()
+	var best := INF
+	for l in loots:
+		if not l.done and l.under_cursor(m):
+			var d := l.global_position.distance_squared_to(m)
+			if d < best:
+				best = d
+				hovered_loot = l
+	if hovered_loot and Input.is_action_just_pressed("attack_1"):
+		hovered_loot.pick_up()
 
 
 func drop_item(item: Dictionary, pos: Vector2) -> void:

@@ -16,7 +16,7 @@ const TIPS := {
 	"potion": {"title": "Healing potion", "demo": "potion",
 		"text": "Press F to drink. The potion is endless but has a cooldown, so use it when it matters, not the moment you are scratched. Some gear shortens the cooldown."},
 	"loot": {"title": "Loot", "demo": "loot",
-		"text": "Enemies, chests and quests drop gear. Walk over it to pick it up. The colour of the light tells you how good it is: grey common, blue magic, gold rare, orange legendary."},
+		"text": "Enemies, chests and quests drop gear. Click it to pick it up, and a green arrow means it beats what you wear, a red one that it is worse. The colour of the light tells you how good it is: grey common, blue magic, gold rare, orange legendary."},
 	"inventory": {"title": "Inventory and gear", "demo": "inventory",
 		"text": "Press I. Click an item to equip it, compare it with what you wear, and sell what you do not need to the smith. Gear that is worn down loses power, so keep an eye on durability."},
 	"interact": {"title": "Interacting", "demo": "interact",
