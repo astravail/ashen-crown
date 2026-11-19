@@ -1177,6 +1177,22 @@ var _delete_arm := ""
 var _news_checked := false
 
 
+## "just now", "5 min ago", "3 h ago", "2 days ago" ...
+func _ago(unix: int) -> String:
+	var secs := int(Time.get_unix_time_from_system()) - unix
+	if secs < 60:
+		return "just now"
+	if secs < 3600:
+		return "%d min ago" % (secs / 60)
+	if secs < 86400:
+		return "%d h ago" % (secs / 3600)
+	var days := secs / 86400
+	if days < 30:
+		return "%d day%s ago" % [days, "" if days == 1 else "s"]
+	var d := Time.get_datetime_dict_from_unix_time(unix)
+	return "%04d-%02d-%02d" % [d.year, d.month, d.day]
+
+
 func show_characters() -> void:
 	var saves: Array = Game.list_characters()
 	if saves.is_empty():
@@ -1208,6 +1224,18 @@ func show_characters() -> void:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		if s.hardcore:
 			b.add_theme_color_override("font_color", Color(0.95, 0.55, 0.45))
+		if int(s.saved) > 0:
+			var when := Label.new()
+			when.text = "Played " + _ago(int(s.saved))
+			when.add_theme_font_override("font", Game.font_italic)
+			when.add_theme_font_size_override("font_size", 15)
+			when.add_theme_color_override("font_color", Color(0.9, 0.78, 0.5) if first == null else Color(0.6, 0.56, 0.52))
+			when.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			when.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+			when.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+			when.offset_top = 8
+			when.offset_right = -14
+			b.add_child(when)
 		row.add_child(b)
 		var d := _button("Delete" if _delete_arm != id else "Sure?", func():
 			if _delete_arm == id:
