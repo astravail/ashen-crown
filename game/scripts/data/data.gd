@@ -498,7 +498,7 @@ const TREE := {
 }
 
 
-# ---------------------------------------------------------------- skills, the Diablo III way
+# ---------------------------------------------------------------- skills: runes and passives
 # There are no skill points. Runes and passives unlock at fixed levels, and the hero picks freely
 # from what is unlocked and can change the choice at any time.
 # Runes: column 2 of TREE. Each tier is one ability with two runes; one rune per ability can be active.

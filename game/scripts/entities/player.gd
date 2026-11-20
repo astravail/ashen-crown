@@ -148,7 +148,7 @@ func area_mult() -> float:
 	return 1.0 + 0.15 * mod("reach")
 
 
-## The potion is no longer a stack of charges: one draught, reusable on a timer, as in Diablo 3.
+## The potion is no longer a stack of charges: one draught, reusable on a timer.
 func flask_max() -> int:
 	return 1
 

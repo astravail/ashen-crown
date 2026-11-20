@@ -147,7 +147,7 @@ var update_url := ""
 const RELEASE_NOTES := [
 	{"v": "0.6.0", "items": [
 		"The game is now called Pyrewake. Your characters and settings carry over.",
-		"Skills work like Diablo III: there are no skill points. Runes and passives unlock as you level. Each ability carries one rune, passives fill slots that open at levels 10, 20, 30 and 45, and you can change them at any time.",
+		"There are no skill points any more. Runes and passives unlock as you level. Each ability carries one rune, passives fill slots that open at levels 10, 20, 30 and 45, and you can change them at any time.",
 		"Slower progression: levelling takes much longer, and a full run of the story ends around level 30.",
 		"Harder enemies: more life and more damage.",
 		"Rarer loot: fewer rare and legendary drops, fewer items from elites, champions, bosses and chests, and most drops sit a little below the zone, so a real upgrade is rare.",
@@ -174,7 +174,7 @@ const RELEASE_NOTES := [
 		"Life is now blood, and each class has its own matter in the other orb: molten cinder, drifting souls, rising flame.",
 		"Blood on the ground is more realistic: dark clotting rims, streaks and a mist of fine drops.",
 		"Controls: rebindable keys and controller buttons, and the same input can no longer be used for two things.",
-		"Health globes drop much less often, as in Diablo.",
+		"Health globes drop much less often.",
 		"What's new now opens after every update, and the game can check for new versions.",
 		"Class and character screens fit their text again."]},
 	{"v": "0.5.3", "items": [
@@ -917,7 +917,7 @@ const FALLEN_PATH := "user://fallen.save"
 var last_killer := "the ash"
 
 
-## Hardcore heroes keep a stash of their own, as in Diablo 3.
+## Hardcore heroes keep a stash of their own.
 func _stash_path() -> String:
 	return STASH_HC_PATH if hardcore else STASH_PATH
 
