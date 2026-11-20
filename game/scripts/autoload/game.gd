@@ -113,8 +113,8 @@ var look := {"accent": 0, "skin": 0, "hair": 0}
 
 signal update_found(version: String, url: String)
 const REPO := "astravail/pyrewake"
-## The game was called Ashen Crown until 0.6.0. Godot keeps saves in a folder named after the game,
-## so on first start under the new name, characters and settings are copied over from the old folder.
+## Before 0.6.0 Godot kept saves in an older folder name. On first start, characters and settings
+## are copied over from that folder. The value must match the old folder exactly, so it stays as it is.
 const OLD_USER_DIR := "Ashen Crown"
 
 

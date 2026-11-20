@@ -11,7 +11,7 @@ BIN_LINK="$HOME/.local/bin/pyrewake"
 DESKTOP="$HOME/.local/share/applications/pyrewake.desktop"
 ICON="$HOME/.local/share/icons/hicolor/scalable/apps/pyrewake.svg"
 
-# Remove an install from before the game was renamed (it was called Ashen Crown)
+# Remove an install made before 0.6.0, which used older paths
 rm -rf "$HOME/.local/share/ashen-crown" "$HOME/.local/bin/ashen-crown" "$HOME/.local/share/applications/ashen-crown.desktop" "$HOME/.local/share/icons/hicolor/scalable/apps/ashen-crown.svg"
 
 if [[ "${1:-}" == "--uninstall" ]]; then
