@@ -376,7 +376,8 @@ func _on_gear_changed() -> void:
 
 func _on_level_up() -> void:
 	var p := world.player
-	hud.show_banner("Level %d" % p.level, "A skill point is waiting  ·  K")
+	var news := Data.unlocks_at(p.level, p.cls)
+	hud.show_banner("Level %d" % p.level, ("Unlocked: %s  ·  K" % ", ".join(news)) if not news.is_empty() else "")
 
 
 func _on_quest_ready(title: String) -> void:

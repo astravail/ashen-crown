@@ -812,7 +812,7 @@ func show_quests(elder: bool) -> void:
 			if first == null:
 				first = row.find_child("QBtn", true, false)
 	if shown == 0:
-		list.add_child(_label("No quests. Speak with Sister Maren in Cinderfall." if not elder else "Nothing for you yet. Come back stronger.", Game.font_italic, 22, Color(0.6, 0.56, 0.52)))
+		list.add_child(_label("No quests. Speak with Sister Maren in Cinderfall." if not elder else "Nothing more for now. Come back when you are stronger.", Game.font_italic, 22, Color(0.6, 0.56, 0.52)))
 	var back := _button("Close", close, 200.0)
 	v.add_child(back)
 	if first:
@@ -928,68 +928,90 @@ func show_waypoints() -> void:
 	(first if first else back).grab_focus.call_deferred()
 
 
-# ---------------------------------------------------------------- skill tree
+# ---------------------------------------------------------------- skills (runes and passives)
 
-func _spent_in(col: int) -> int:
-	var n := 0
-	for col_node in Data.tree_nodes(col, world.player.cls):
-		n += world.player.mod(col_node.id)
-	return n
+## One choice on the skills screen: a rune or a passive. Locked ones show the level they open at.
+func _skill_button(p: Player, u: Dictionary, active: bool, can: bool, locked_at: int, toggle: Callable) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(250, 96)
+	b.focus_mode = Control.FOCUS_ALL
+	var open := locked_at <= 0
+	var edge := Game.C_EMBER if active else (Color(0.5, 0.4, 0.3) if open else Color(0.2, 0.18, 0.17))
+	for st in ["normal", "hover", "focus", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(st, _sb(Color(0.12, 0.08, 0.06) if active else (Color(0.08, 0.065, 0.058) if open else Color(0.05, 0.045, 0.045)),
+			Game.C_EMBER_HOT if st in ["hover", "focus"] and (can or active) else edge, 10))
+	b.disabled = not (can or active)
+	var bv := VBoxContainer.new()
+	bv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bv.add_theme_constant_override("separation", 1)
+	b.add_child(bv)
+	var title := String(u.name) + ("   ·  active" if active else "")
+	bv.add_child(_label(title, Game.font_display_bold, 17, Color(1.0, 0.8, 0.5) if active else (Color(0.97, 0.9, 0.8) if open else Color(0.45, 0.42, 0.4))))
+	var desc: String = u.desc if open else "Unlocks at level %d" % locked_at
+	if open and Data.is_passive(u.id):
+		desc = "%s  (x%d)" % [u.desc, int(Data.PASSIVE_RANK[u.id])]
+	bv.add_child(_wrap(_label(desc, Game.font_body, 15, Color(0.72, 0.68, 0.64) if open else Color(0.5, 0.35, 0.3)), 226.0))
+	b.pressed.connect(func():
+		toggle.call()
+		Sfx.play("ui_select", -6.0)
+		show_skills())
+	b.mouse_entered.connect(func(): b.grab_focus())
+	return b
 
 
 func show_skills() -> void:
 	mode = "skills"
 	var p := world.player
-	var v := _frame("SKILLS", "%d point%s to spend" % [p.pending_levels, "" if p.pending_levels == 1 else "s"])
-	v.add_child(_label("You start with nothing. Every level earns a point. Each column opens a tier for every two points spent in it.", Game.font_italic, 17, Color(0.65, 0.6, 0.55)))
+	p.pending_levels = 0
+	var slots := Data.passive_slots(p.level)
+	var v := _frame("SKILLS", "Passive slots: %d of %d in use" % [p.passives_used(), slots])
+	v.add_child(_label("Runes and passives unlock as you level. Each ability carries one rune. Change them whenever you like.", Game.font_italic, 17, Color(0.65, 0.6, 0.55)))
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 20)
 	v.add_child(cols)
 	var first: Button = null
-	for ci in 4:
+	# Runes: one column per ability, two runes each
+	for tier in 4:
+		var runes := Data.runes_of(p.cls, tier)
+		if runes.is_empty():
+			continue
 		var cv := VBoxContainer.new()
 		cv.add_theme_constant_override("separation", 8)
 		cols.add_child(cv)
-		var spent := _spent_in(ci)
-		var name_txt: String = Data.TREE_COLS[ci] if ci != 2 else Data.CLASSES[p.cls].name
-		cv.add_child(_label("%s  ·  %d" % [name_txt.to_upper(), spent], Game.font_display_bold, 18, Color(0.95, 0.7, 0.4)))
-		for u in Data.tree_nodes(ci, p.cls):
-			var rank: int = p.mod(u.id)
-			var need: int = int(u.tier) * 2
-			var open := spent >= need
-			var can: bool = open and rank < int(u.max) and p.pending_levels > 0
-			var b := Button.new()
-			b.custom_minimum_size = Vector2(250, 112)
-			b.focus_mode = Control.FOCUS_ALL
-			var edge := Game.C_EMBER if rank > 0 else (Color(0.5, 0.4, 0.3) if open else Color(0.2, 0.18, 0.17))
-			for st in ["normal", "hover", "focus", "pressed", "disabled"]:
-				b.add_theme_stylebox_override(st, _sb(Color(0.08, 0.065, 0.058) if open else Color(0.05, 0.045, 0.045), Game.C_EMBER_HOT if st in ["hover", "focus"] and can else edge, 10))
-			b.disabled = not can
-			var bv := VBoxContainer.new()
-			bv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			bv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			bv.add_theme_constant_override("separation", 1)
-			b.add_child(bv)
-			bv.add_child(_label("%s   %d / %d" % [u.name, rank, int(u.max)], Game.font_display_bold, 17, Color(0.97, 0.9, 0.8) if open else Color(0.45, 0.42, 0.4)))
-			bv.add_child(_wrap(_label(("Needs %d points in this column" % need) if not open else u.desc, Game.font_body, 15, Color(0.72, 0.68, 0.64) if open else Color(0.5, 0.35, 0.3)), 226.0))
+		cv.add_child(_label(String(runes[0].tag).to_upper(), Game.font_display_bold, 18, Color(0.95, 0.7, 0.4)))
+		for u in runes:
 			var id: String = u.id
-			b.pressed.connect(func():
-				p.add_mod(id)
-				p.pending_levels -= 1
-				Sfx.play("levelup", -8.0)
-				show_skills())
-			b.mouse_entered.connect(func(): b.grab_focus())
+			var need := Data.unlock_level(id)
+			var b := _skill_button(p, u, p.has_mod(id), p.level >= need, need if p.level < need else 0, func(): p.toggle_rune(id))
 			cv.add_child(b)
-			if first == null and can:
+			if first == null and not b.disabled:
 				first = b
+	# Passives: two columns
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 8)
+	v.add_child(pv)
+	var slot_txt := "PASSIVES"
+	if slots < Data.PASSIVE_SLOTS_AT.size():
+		slot_txt += "   ·  next slot at level %d" % int(Data.PASSIVE_SLOTS_AT[slots])
+	pv.add_child(_label(slot_txt, Game.font_display_bold, 18, Color(0.95, 0.7, 0.4)))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+	pv.add_child(grid)
+	var free := p.passives_used() < slots
+	for u in Data.passives():
+		var id: String = u.id
+		var need := Data.unlock_level(id)
+		var b := _skill_button(p, u, p.has_mod(id), p.level >= need and free, need if p.level < need else 0, func(): p.toggle_passive(id))
+		b.custom_minimum_size = Vector2(230, 96)
+		grid.add_child(b)
+		if first == null and not b.disabled:
+			first = b
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 14)
 	v.add_child(foot)
-	var cost := 40 * p.level
-	var rb := _button("Reset skills  (%dg)" % cost, _respec, 280.0)
-	rb.disabled = Game.gold < cost or p.mods.is_empty() or not world.village
-	foot.add_child(rb)
-	foot.add_child(_label("Resetting is possible in the village only." if not world.village else "", Game.font_italic, 16, Color(0.55, 0.5, 0.46)))
 	if p.level >= Data.MAX_LEVEL:
 		var armed := [false]
 		var pb: Button
@@ -1004,18 +1026,3 @@ func show_skills() -> void:
 	foot.add_child(_button("Close", close, 200.0))
 	if first:
 		first.grab_focus.call_deferred()
-
-
-func _respec() -> void:
-	var p := world.player
-	var cost := 40 * p.level
-	if Game.gold < cost:
-		return
-	Game.gold -= cost
-	for k in p.mods.keys():
-		p.pending_levels += int(p.mods[k])
-	p.mods.clear()
-	p.step_charges = 1
-	p.recompute()
-	Sfx.play("summon", -4.0)
-	show_skills()

@@ -44,8 +44,17 @@ func _run() -> void:
 	_say("shop ok, gold=%d" % Game.gold)
 	p.show_skills()
 	await _wait(0.2)
-	w.player.pending_levels = 3
-	w.player.add_mod("ferocity")
+	w.player.level = 32
+	w.player.toggle_rune(Data.runes_of(w.player.cls, 0)[0].id)
+	w.player.toggle_rune(Data.runes_of(w.player.cls, 0)[1].id)
+	w.player.toggle_passive("vigor")
+	w.player.toggle_passive("ferocity")
+	w.player.toggle_passive("swiftness")
+	w.player.toggle_passive("precision")
+	assert(w.player.passives_used() == 3, "three passive slots at level 32")
+	assert(not w.player.has_mod(Data.runes_of(w.player.cls, 0)[0].id), "one rune per ability")
+	w.player.mods["reach"] = 5
+	w.player.normalize_mods()
 	p.show_skills()
 	await _wait(0.2)
 	p.show_waypoints()

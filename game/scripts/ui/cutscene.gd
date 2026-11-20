@@ -17,7 +17,7 @@ const SCENES := {
 	"act1": {"title": "Act II · The Buried City", "lines": [["narrator", "Valdremor buried its dead. The dead dug out."]]},
 	"act2": {"title": "Act III · The Rot", "lines": [["narrator", "The ash settles here, and rots."]]},
 	"act3": {"title": "Act IV · The Deep Works", "lines": [["narrator", "The miners dug too deep, and something answered."]]},
-	"act4": {"title": "Act V · The Burning Court", "lines": [["narrator", "Where the court still feasts on cinders."]]},
+	"act4": {"title": "Act V · The Burning Court", "lines": [["narrator", "The court still feasts on cinders."]]},
 	"act5": {"title": "Act VI · The Pyre", "lines": [["narrator", "Beneath the world, the crown was forged."]]},
 	"king": {"title": "The Ember King", "lines": [
 		["boss", "You carry my fire. Did you think I would not feel it?"],

@@ -3,7 +3,7 @@ extends Node
 
 ## Beta numbering: 0.MILESTONE.BUILD. The leading 0 stays until release. MILESTONE goes up when a
 ## big system lands (0.1 prototype, 0.2 first loot/village/acts, 0.3 this build) and BUILD goes up for fixes and balance.
-const VERSION := "0.5.11"
+const VERSION := "0.6.0"
 const SETTINGS_PATH := "user://settings.cfg"
 const RECORD_PATH := "user://records.cfg"
 
@@ -112,12 +112,46 @@ var look := {"accent": 0, "skin": 0, "hair": 0}
 
 
 signal update_found(version: String, url: String)
-const REPO := "astravail/ashen-crown"
+const REPO := "astravail/pyrewake"
+## The game was called Ashen Crown until 0.6.0. Godot keeps saves in a folder named after the game,
+## so on first start under the new name, characters and settings are copied over from the old folder.
+const OLD_USER_DIR := "Ashen Crown"
+
+
+func _migrate_old_saves() -> void:
+	var cur := OS.get_user_data_dir()
+	var old := cur.get_base_dir().path_join(OLD_USER_DIR)
+	if not DirAccess.dir_exists_absolute(old):
+		return
+	var here := DirAccess.open(cur)
+	if here == null or not here.get_files().is_empty():
+		return
+	_copy_dir(old, cur)
+
+
+func _copy_dir(from: String, to: String) -> void:
+	DirAccess.make_dir_recursive_absolute(to)
+	var d := DirAccess.open(from)
+	if d == null:
+		return
+	for f in d.get_files():
+		DirAccess.copy_absolute(from.path_join(f), to.path_join(f))
+	for sub_dir in d.get_directories():
+		if sub_dir in ["logs", "shader_cache", "vulkan"]:
+			continue
+		_copy_dir(from.path_join(sub_dir), to.path_join(sub_dir))
 var update_version := ""
 var update_url := ""
 
 ## What changed in each version, newest first. Shown in What's new, and once after every update.
 const RELEASE_NOTES := [
+	{"v": "0.6.0", "items": [
+		"The game is now called Pyrewake. Your characters and settings carry over.",
+		"Skills work like Diablo III: there are no skill points. Runes and passives unlock as you level. Each ability carries one rune, passives fill slots that open at levels 10, 20, 30 and 45, and you can change them at any time.",
+		"Slower progression: levelling takes much longer, and a full run of the story ends around level 30.",
+		"Harder enemies: more life and more damage.",
+		"Rarer loot: fewer rare and legendary drops, fewer items from elites, champions, bosses and chests, and most drops sit a little below the zone, so a real upgrade is rare.",
+		"Voice lines and in-game text rewritten in a darker, more serious tone."]},
 	{"v": "0.5.8", "items": [
 		"Abilities unlock as you level: secondary at 3, skill 1 at 6, skill 2 at 10 and your ultimate at 15. The Abilities tab shows what is still locked.",
 		"The maximum level is 60. At the top you can prestige from the skills screen: level and skills reset, and each rank (up to 10) gives lasting damage, life, gold and magic find.",
@@ -163,6 +197,7 @@ const RELEASE_NOTES := [
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_migrate_old_saves()
 	_load_fonts()
 	_build_theme()
 	_setup_input()
@@ -1070,7 +1105,7 @@ func check_update() -> void:
 			update_version = tag
 			update_url = String(data.get("html_url", "https://github.com/%s/releases" % REPO))
 			update_found.emit(update_version, update_url))
-	req.request("https://api.github.com/repos/%s/releases/latest" % REPO, PackedStringArray(["User-Agent: AshenCrown", "Accept: application/vnd.github+json"]))
+	req.request("https://api.github.com/repos/%s/releases/latest" % REPO, PackedStringArray(["User-Agent: Pyrewake", "Accept: application/vnd.github+json"]))
 
 
 static func _newer(a: String, b: String) -> bool:

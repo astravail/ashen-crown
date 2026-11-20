@@ -435,7 +435,7 @@ func _draw_left(p: Player) -> void:
 	_text(Vector2(x, y), "%d gold" % Game.gold, 17, Color(1.0, 0.85, 0.3), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 	y += 24
 	if p.pending_levels > 0:
-		_text(Vector2(x, y), "%d skill point%s  ·  K" % [p.pending_levels, "" if p.pending_levels == 1 else "s"], 16, Color(0.6, 0.9, 0.6), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
+		_text(Vector2(x, y), "New skill option%s  ·  K" % ["" if p.pending_levels == 1 else "s"], 16, Color(0.6, 0.9, 0.6), Game.font_body_bold, HORIZONTAL_ALIGNMENT_LEFT, -1, 4)
 		y += 22
 	var broken := 0
 	for s in Game.equipment.keys():

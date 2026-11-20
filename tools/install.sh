@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Builds Ashen Crown and installs it for the current user (Omarchy / any freedesktop Linux).
+# Builds Pyrewake and installs it for the current user (Omarchy / any freedesktop Linux).
 # Run from anywhere:  tools/install.sh
 # Uninstall:          tools/install.sh --uninstall
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GAME="$ROOT/game"
-APP_DIR="$HOME/.local/share/ashen-crown"
-BIN_LINK="$HOME/.local/bin/ashen-crown"
-DESKTOP="$HOME/.local/share/applications/ashen-crown.desktop"
-ICON="$HOME/.local/share/icons/hicolor/scalable/apps/ashen-crown.svg"
+APP_DIR="$HOME/.local/share/pyrewake"
+BIN_LINK="$HOME/.local/bin/pyrewake"
+DESKTOP="$HOME/.local/share/applications/pyrewake.desktop"
+ICON="$HOME/.local/share/icons/hicolor/scalable/apps/pyrewake.svg"
+
+# Remove an install from before the game was renamed (it was called Ashen Crown)
+rm -rf "$HOME/.local/share/ashen-crown" "$HOME/.local/bin/ashen-crown" "$HOME/.local/share/applications/ashen-crown.desktop" "$HOME/.local/share/icons/hicolor/scalable/apps/ashen-crown.svg"
 
 if [[ "${1:-}" == "--uninstall" ]]; then
 	rm -rf "$APP_DIR" "$BIN_LINK" "$DESKTOP" "$ICON"
 	command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications" || true
-	echo "Ashen Crown uninstalled."
+	echo "Pyrewake uninstalled."
 	exit 0
 fi
 
@@ -30,30 +33,30 @@ GODOT="${GODOT:-$(command -v godot || true)}"
 # Point the export preset at the right architecture, then build a single self-contained binary.
 sed -i "/^\[preset.0.options\]/,/^\[preset.1\]/ s/^binary_format\/architecture=.*/binary_format\/architecture=\"$ARCH\"/" "$GAME/export_presets.cfg"
 mkdir -p "$GAME/build"
-OUT="$GAME/build/ashen-crown.$ARCH"
+OUT="$GAME/build/pyrewake.$ARCH"
 echo "Building $OUT ..."
-"$GODOT" --headless --path "$GAME" --export-release "Linux" "build/ashen-crown.$ARCH" >/dev/null 2>&1
+"$GODOT" --headless --path "$GAME" --export-release "Linux" "build/pyrewake.$ARCH" >/dev/null 2>&1
 [[ -s "$OUT" ]] || { echo "Export failed (are the Godot export templates installed?)." >&2; exit 1; }
 
 mkdir -p "$APP_DIR" "$(dirname "$BIN_LINK")" "$(dirname "$DESKTOP")" "$(dirname "$ICON")"
-install -m 755 "$OUT" "$APP_DIR/ashen-crown"
+install -m 755 "$OUT" "$APP_DIR/pyrewake"
 cp "$GAME/icon.svg" "$ICON"
-ln -sf "$APP_DIR/ashen-crown" "$BIN_LINK"
+ln -sf "$APP_DIR/pyrewake" "$BIN_LINK"
 
 cat >"$DESKTOP" <<EOF
 [Desktop Entry]
-Name=Ashen Crown
+Name=Pyrewake
 GenericName=Action RPG
 Comment=Nothing stays buried.
-Exec=$APP_DIR/ashen-crown
-Icon=ashen-crown
+Exec=$APP_DIR/pyrewake
+Icon=pyrewake
 Terminal=false
 Type=Application
 Categories=Game;ActionGame;RolePlaying;
-StartupWMClass=Ashen Crown
+StartupWMClass=Pyrewake
 EOF
 
 command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications" || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
-echo "Installed. Launch it from the app launcher (Super + Space) or run: ashen-crown"
+echo "Installed. Launch it from the app launcher (Super + Space) or run: pyrewake"

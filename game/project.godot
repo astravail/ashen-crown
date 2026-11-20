@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Ashen Crown"
+config/name="Pyrewake"
 config/description="Nothing stays buried."
 config/version="1.0.0"
 run/main_scene="res://scenes/main.tscn"

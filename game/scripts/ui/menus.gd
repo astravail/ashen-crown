@@ -166,7 +166,7 @@ func show_title() -> void:
 	var hall := _button("Hall of the Fallen", show_fallen)
 	hall.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	v.add_child(hall)
-	var online := _button("Online  ·  coming soon", func(): pass)
+	var online := _button("Online  ·  not yet available", func(): pass)
 	online.disabled = true
 	online.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	online.tooltip_text = "Co-op and a shared world are planned. Not in this build."
@@ -807,7 +807,7 @@ func show_fragments(choices: Array) -> void:
 	var c := _root(0.72)
 	var v := _center_box(c, 22)
 	v.add_child(_label("CROWN FRAGMENT", Game.font_display_bold, 46, Color(1.0, 0.8, 0.55), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_label("Take one. It will not let go.", Game.font_italic, 22, Color(0.75, 0.7, 0.65), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_label("Choose one. It cannot be undone.", Game.font_italic, 22, Color(0.75, 0.7, 0.65), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_rule(360))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 24)
@@ -889,11 +889,11 @@ func show_ending(choice: String) -> void:
 	if choice == "shatter":
 		lines = ["The crown breaks into a thousand cooling pieces.",
 			"For the first time in years, the ash stops falling.",
-			"Valdremor has no king. It has a chance."]
+			"Valdremor has no king. Perhaps it does not need one."]
 	else:
 		lines = ["The metal is warm, and then it is not warm at all.",
-			"The dead in the Cinderfields stand up and turn to face you.",
-			"Every king burns. You will burn slower."]
+			"Across the Cinder Fields, the dead rise and turn to face you.",
+			"Every king burns. Yours will be a slower fire."]
 	v.add_child(_label(title, Game.font_display_bold, 54, Color(1.0, 0.8, 0.55) if choice == "shatter" else Color(0.95, 0.4, 0.25), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_rule(400))
 	for l in lines:
@@ -1014,7 +1014,7 @@ class Logo extends Control:
 			var q := Vector2(c.x - 84 + i * 21 + sin(t * 1.3 + i * 2.0) * 9.0, c.y - 50 - ph * 120.0)
 			ink.glow(self, q, 9.0 * (1.0 - ph), Color(1.0, 0.45, 0.12, 0.4 * (1.0 - ph)))
 			ink.dot(self, q, 2.2 * (1.0 - ph), Color(1.0, 0.75, 0.35, 1.0 - ph))
-		var title := "ASHEN CROWN"
+		var title := "PYREWAKE"
 		var fs := 96
 		var pos := Vector2(0, 268)
 		draw_string_outline(f, pos, title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 14, Color(0, 0, 0, 0.85))
@@ -1150,7 +1150,7 @@ func show_permadeath(zone_name: String) -> void:
 	var c := _root(0.92)
 	var v := _center_box(c, 16)
 	v.add_child(_label("YOU HAVE FALLEN", Game.font_display_bold, 64, Color(0.85, 0.3, 0.22), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_label("%s is gone. Hardcore does not forgive." % Game.hero_name, Game.font_italic, 26, Color(0.85, 0.8, 0.74), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_label("%s is gone, and will not return." % Game.hero_name, Game.font_italic, 26, Color(0.85, 0.8, 0.74), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_label("Slain by %s" % Game.last_killer, Game.font_display, 22, Color(0.85, 0.5, 0.35), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_label(zone_name, Game.font_italic, 22, Color(0.65, 0.6, 0.56), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_rule(420))
@@ -1260,7 +1260,7 @@ func show_fallen() -> void:
 	var c := _root(0.82)
 	var v := _center_box(c, 14)
 	v.add_child(_label("HALL OF THE FALLEN", Game.font_display_bold, 40, Color(0.85, 0.4, 0.3), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_label("Hardcore heroes who did not come back.", Game.font_italic, 20, Color(0.7, 0.65, 0.6), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_label("Hardcore heroes who did not return.", Game.font_italic, 20, Color(0.7, 0.65, 0.6), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_rule(420))
 	var sc := ScrollContainer.new()
 	sc.custom_minimum_size = Vector2(900, 420)

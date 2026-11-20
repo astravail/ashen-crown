@@ -104,7 +104,7 @@ func pick_up() -> void:
 		world.texts.add_label(p.global_position + Vector2(0, -56), String(item.name), color())
 		if int(item.rarity) >= 3:
 			Sfx.play("levelup", -4.0)
-			Voice.bark("player", "legendary", "Now that is something.")
+			Voice.bark("player", "legendary", "A worthy find.")
 		done = true
 	elif world.full_warn <= 0.0:
 		world.full_warn = 3.0

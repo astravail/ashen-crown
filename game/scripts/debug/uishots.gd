@@ -79,6 +79,11 @@ func _run() -> void:
 	await _wait(0.4)
 	print("[uishots] inventory closed by I: ", not main.panels.is_open(), " paused=", get_tree().paused)
 	main.panels.close()
+	var hero: Player = main.world.player
+	hero.level = 24
+	hero.toggle_rune(Data.runes_of(hero.cls, 0)[1].id)
+	hero.toggle_passive("vigor")
+	hero.toggle_passive("second_wind")
 	main.panels.show_skills()
 	await _wait(0.4)
 	await _shot("skills")

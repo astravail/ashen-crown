@@ -174,6 +174,62 @@ func recompute() -> void:
 	flask = mini(flask, flask_max())
 
 
+## Turn a rune on or off. Only one rune per ability is active.
+func toggle_rune(id: String) -> void:
+	if not Data.is_rune(id) or level < Data.unlock_level(id):
+		return
+	var on := has_mod(id)
+	for o in Data.runes_of(cls, int(Data.TREE[id][1])):
+		mods.erase(o.id)
+	if not on:
+		mods[id] = 1
+	_after_mods()
+
+
+## Turn a passive on or off. It needs a free passive slot.
+func toggle_passive(id: String) -> void:
+	if not Data.is_passive(id) or level < Data.unlock_level(id):
+		return
+	if has_mod(id):
+		mods.erase(id)
+	elif passives_used() < Data.passive_slots(level):
+		mods[id] = int(Data.PASSIVE_RANK[id])
+	_after_mods()
+
+
+func passives_used() -> int:
+	var n := 0
+	for k in mods.keys():
+		if Data.is_passive(k):
+			n += 1
+	return n
+
+
+## Brings old saves (and anything out of step) in line with the rules: unlocked only,
+## one rune per ability, passives at their fixed rank and within the free slots.
+func normalize_mods() -> void:
+	var out := {}
+	var tiers := {}
+	var slots := Data.passive_slots(level)
+	var used := 0
+	for k in mods.keys():
+		if Data.is_rune(k):
+			var t := int(Data.TREE[k][1])
+			if level >= Data.unlock_level(k) and not tiers.has(t) and Data.upgrade(k).get("cls", "") == cls:
+				tiers[t] = true
+				out[k] = 1
+		elif Data.is_passive(k) and level >= Data.unlock_level(k) and used < slots:
+			used += 1
+			out[k] = int(Data.PASSIVE_RANK[k])
+	mods = out
+	_after_mods()
+
+
+func _after_mods() -> void:
+	step_charges = mini(step_charges, 2 if has_mod("step_double") else 1)
+	recompute()
+
+
 func add_mod(id: String) -> void:
 	mods[id] = mod(id) + 1
 	if id == "flaskmaker":
@@ -230,7 +286,8 @@ func gain_xp(amount: float) -> void:
 		xp -= xp_next
 		level += 1
 		xp_next = Data.xp_for_level(level)
-		pending_levels += 1
+		# pending_levels now counts new runes and passives the hero has not looked at yet
+		pending_levels += Data.unlocks_at(level, cls).size()
 		Game.stats.level = level
 		heal(max_hp * 0.25, false)
 		world.glow_fx.burst(global_position, 30, Color(3.0, 1.4, 0.4), 80, 320, 0.8, 3.0, Particles.SPARK)
@@ -260,7 +317,7 @@ func prestige_up() -> bool:
 	world.glow_fx.ring(global_position, 200.0, Color(3.0, 2.2, 0.6, 0.9), 0.9)
 	world.glow_fx.burst(global_position, 50, Color(3.0, 2.0, 0.5), 100, 420, 1.0, 3.0, Particles.SPARK)
 	Sfx.play("levelup", 0.0)
-	world.banner.emit("Prestige %d" % Game.prestige, "Stronger, and starting again")
+	world.banner.emit("Prestige %d" % Game.prestige, "Stronger. The road begins again")
 	return true
 
 
@@ -294,8 +351,8 @@ func import_state(s: Dictionary) -> void:
 	ash = s.ash
 	flask = s.flask
 	step_charges = s.step_charges
-	pending_levels = int(s.get("points", 0))
-	recompute()
+	pending_levels = 0
+	normalize_mods()
 	hp = maxf(max_hp * 0.5, max_hp * float(s.hp))
 
 

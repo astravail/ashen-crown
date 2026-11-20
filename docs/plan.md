@@ -23,4 +23,4 @@
 - Hvilken spillmotor? (Godot, Unity, Unreal)
 - 2D isometrisk eller 3D?
 - Singleplayer først, eller co-op fra start?
-- Sjekk at navnet «Ashen Crown» er ledig (Steam, itch.io, varemerkeregistre)
+- Navnet ble byttet fra «Ashen Crown» til «Pyrewake» i 0.6.0, fordi «Ashen Crown» allerede var tatt på Steam

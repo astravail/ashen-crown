@@ -61,10 +61,10 @@ const CLASSES := {
 	},
 	"crownbearer": {
 		"name": "Crownbearer",
-		"role": "Unbound · Overpowered",
+		"role": "Crown · Unbound",
 		"locked": true,
-		"unlock_hint": "Reserved for those who have ended the Ember King's reign. Finish the whole story once, on any character, and the crown will answer to you.",
-		"blurb": "The ash crown chose you. What once burned a kingdom now bends to your hand, and nothing in these lands can stand against it.",
+		"unlock_hint": "Defeat the Ember King once, with any character, to unlock.",
+		"blurb": "You ended the Ember King and took up what he left. The crown's fire answers to you now. It has not forgotten whose it was.",
 		"resource": "Crown Fire",
 		"resource_hint": "Never runs dry. Every ability is free.",
 		"res_color": Color(1.0, 0.8, 0.25),
@@ -219,11 +219,13 @@ static func enemy_def(k: String) -> Dictionary:
 
 ## The game is meant to be slow and grindy. Every pacing knob lives here.
 const GRIND := {
-	"xp_mult": 0.55,        # xp per kill
+	"xp_mult": 0.5,         # xp per kill
 	"xp_zone": 0.35,        # extra xp per zone depth
-	"drop_chance": 0.035,   # item chance per ordinary kill
+	"drop_chance": 0.022,   # item chance per ordinary kill
 	"gold_mult": 0.7,
-	"enemy_hp": 1.35,       # baseline life of every enemy
+	"enemy_hp": 1.6,        # baseline life of every enemy
+	"enemy_dmg": 1.2,       # baseline damage of every enemy
+	"elite_extra": 0.1,     # chance an elite drops a second item
 	"pack_size": 1.0,
 	"repair_mult": 1.0,
 }
@@ -242,7 +244,8 @@ static func ability_unlock(i: int, cls: String) -> int:
 
 
 static func xp_for_level(level: int) -> float:
-	return 24.0 + 16.0 * level + 1.2 * level * level
+	return 40.0 + 28.0 * level + 2.6 * level * level + 0.015 * level * level * level
+
 
 const LAST_ZONE := 11
 
@@ -251,7 +254,7 @@ const ACTS := [
 	{"name": "Act II", "title": "The Buried City", "zones": [2, 3], "line": "Valdremor buried its dead. The dead dug out."},
 	{"name": "Act III", "title": "The Rot", "zones": [4, 5], "line": "The ash settles here, and rots."},
 	{"name": "Act IV", "title": "The Deep Works", "zones": [6, 7], "line": "The miners dug too deep, and something answered."},
-	{"name": "Act V", "title": "The Burning Court", "zones": [8, 9], "line": "Where the court still feasts on cinders."},
+	{"name": "Act V", "title": "The Burning Court", "zones": [8, 9], "line": "The court still feasts on cinders."},
 	{"name": "Act VI", "title": "The Pyre", "zones": [10, 11], "line": "Beneath the world, the crown was forged."},
 ]
 
@@ -350,7 +353,7 @@ const ZONES := [
 		"champion": {"kind": "cinder_hound", "name": "Cinder Alpha", "scale": 2.4},
 	},
 	{
-		"id": "court", "name": "The Obsidian Court", "line": "The court still feasts. You are the course.", "act": 4,
+		"id": "court", "name": "The Obsidian Court", "line": "The court still feasts. No one has left the table.", "act": 4,
 		"style": "dungeon", "size": Vector2i(150, 150), "ambient": "amb_hell", "prop_density": 1.4,
 		"ground_a": Color(0.22, 0.2, 0.24), "ground_b": Color(0.1, 0.09, 0.12), "vein": Color(3.4, 0.7, 0.4), "vein_amt": 0.6,
 		"wall": Color(0.015, 0.012, 0.02), "pattern": 1.0, "modulate": Color(0.42, 0.38, 0.46),
@@ -359,7 +362,7 @@ const ZONES := [
 		"champion": {"kind": "court_wraith", "name": "The Obsidian Queen", "scale": 2.1},
 	},
 	{
-		"id": "pyre", "name": "The Infernal Pyre", "line": "Beneath the world, in the fires of hell, the crown was forged.", "act": 5,
+		"id": "pyre", "name": "The Infernal Pyre", "line": "Here, beneath the world, the crown was forged.", "act": 5,
 		"style": "open", "size": Vector2i(150, 150), "ambient": "amb_hell",
 		"ground_a": Color(0.30, 0.2, 0.18), "ground_b": Color(0.13, 0.07, 0.07), "vein": Color(4.0, 0.8, 0.15), "vein_amt": 0.9,
 		"wall": Color(0.03, 0.008, 0.008), "pattern": 3.0, "modulate": Color(0.5, 0.4, 0.4),
@@ -368,7 +371,7 @@ const ZONES := [
 		"champion": {"kind": "demon_brute", "name": "Warden of Cinders", "scale": 1.9},
 	},
 	{
-		"id": "throne", "name": "The Throne of Ash", "line": "He has been waiting. He is very tired.", "act": 5,
+		"id": "throne", "name": "The Throne of Ash", "line": "He has been waiting a long time.", "act": 5,
 		"style": "open", "size": Vector2i(130, 130), "ambient": "amb_hell",
 		"ground_a": Color(0.28, 0.18, 0.16), "ground_b": Color(0.12, 0.06, 0.06), "vein": Color(4.0, 0.8, 0.15), "vein_amt": 1.0,
 		"wall": Color(0.03, 0.008, 0.008), "pattern": 3.0, "modulate": Color(0.5, 0.38, 0.38),
@@ -395,7 +398,7 @@ const ZONES := [
 		"props": ["rubble", "rock", "crate", "barrel", "brazier", "bones"], "champion": {},
 	},
 	{
-		"id": "gravedigger", "name": "The Gravedigger's Hut", "line": "He dug too many holes.", "interior": true, "parent": 4, "act": 2,
+		"id": "gravedigger", "name": "The Gravedigger's Hut", "line": "He buried more than the dead.", "interior": true, "parent": 4, "act": 2,
 		"style": "dungeon", "size": Vector2i(80, 80), "ambient": "amb_marsh", "prop_density": 1.6, "chests": 5, "tier": 4,
 		"ground_a": Color(0.34, 0.36, 0.32), "ground_b": Color(0.17, 0.19, 0.17), "vein": Color(1.4, 1.9, 0.5), "vein_amt": 0.35,
 		"wall": Color(0.03, 0.04, 0.035), "pattern": 2.0, "modulate": Color(0.42, 0.46, 0.44),
@@ -418,7 +421,7 @@ const STORY := [
 	{"zone": 12, "type": "chest", "title": "The Cellar Door", "desc": "Maren's cellar has been broken into from below. Fetch the Warden's Ledger from the reliquary chest.",
 		"say": "My cellar was sealed for twenty years. Last night something knocked from inside. The Warden's Ledger is down there: the only record of how the crown was forged. Bring it to me."},
 	{"zone": 0, "title": "The Hound of the Road", "desc": "The Ledger names who carried the first shard out of the keep: Aldric's hound, Blackfang.",
-		"say": "The Ledger is clear. Aldric's favourite hound carried the first shard down the road before the keep fell. It still guards it. The Blackwood has not forgiven anyone since."},
+		"say": "The Ledger is clear. Aldric's favourite hound carried the first shard down the road before the keep fell. It still guards it. Find it in the Blackwood."},
 	{"zone": 1, "title": "The Captain Who Stayed", "desc": "Ser Hollis held the keep gate and never left. He bears the second shard.",
 		"say": "Ser Hollis swore he would hold the gate until the king returned. The king did return. Hollis is still holding it. End his watch and take what he guards."},
 	{"zone": 2, "title": "The Man Who Sold the Gates", "desc": "The Gilded Magistrate sold Valdremor's gate keys for gold. His shard is the third.",
@@ -426,11 +429,11 @@ const STORY := [
 	{"zone": 3, "title": "The Abbess Who Prayed", "desc": "The Weeping Abbess binds the dead to the crown with her prayers. Silence her and the fourth shard is yours.",
 		"say": "Her prayers keep the dead walking. She meant them as comfort, and the crown made them a leash. Go down into the Catacombs and end the song."},
 	{"zone": 4, "title": "The Mother in the Mire", "desc": "The Drowned Mother lost her children to the fire and took the fifth shard into the marsh.",
-		"say": "A mother carried her children into the water to save them from the fire. The water kept them. Something in the marsh is still carrying them. Be gentle, if you can. You cannot."},
+		"say": "A mother carried her children into the water to save them from the fire. The water kept them. Something in the marsh is still carrying them. End it quickly."},
 	{"zone": 5, "title": "The Last Blessing", "desc": "Brother Mire blessed the coronation. The sixth shard rings in his drowned chapel.",
-		"say": "Brother Mire blessed the crown on Aldric's head. He has been ringing the chapel bell ever since, in case someone forgives him. No one will."},
+		"say": "Brother Mire blessed the crown on Aldric's head. He has been ringing the chapel bell ever since, waiting for a forgiveness that will not come."},
 	{"zone": 6, "title": "What the Miners Dug", "desc": "The Foreman dug too deep at Aldric's order, searching for forge-stone. The seventh shard is in Ashmine.",
-		"say": "The king wanted forge-stone, hotter than anything on the surface. His foreman dug until the rock answered. Go into Ashmine. Bring your own light."},
+		"say": "The king wanted forge-stone, hotter than anything on the surface. His foreman dug until the rock answered. Go down into Ashmine. Take a light."},
 	{"zone": 7, "title": "The Bottom of the Shaft", "desc": "Whatever answered the Foreman lies at the bottom of the depths, wearing the eighth shard.",
 		"say": "The Foreman was only the first. Whatever he woke is below him, and it has the eighth shard. Do not look straight at the glow."},
 	{"zone": 8, "title": "The Pack Master", "desc": "Cinder Alpha leads the hounds of the Burning Court across the Cinder Fields. The ninth shard hangs from its collar.",
@@ -440,7 +443,7 @@ const STORY := [
 	{"zone": 10, "title": "The Warden of the Forge", "desc": "The Warden of Cinders guards the stair to the throne. The last shard is his.",
 		"say": "Below the court there is a stair, and on the stair, the Warden. He keeps the last shard, and the way to the throne. Take both."},
 	{"zone": 11, "type": "boss", "title": "The Ember King", "desc": "Every shard is yours. Walk the Throne of Ash and end Aldric, or wear the crown yourself.",
-		"say": "You carry all of them now. Every shard is warm against you, and the crown is calling its own back. Go to the throne. Whatever you choose, make it count."},
+		"say": "You carry all of them now. Every shard is warm against you, and the crown is calling its own back. Go to the throne, and end this."},
 ]
 
 
@@ -493,6 +496,98 @@ const TREE := {
 	"bolt_split": [2, 0], "bolt_pierce": [2, 0], "storm_big": [2, 1], "storm_pull": [2, 1],
 	"step_double": [2, 2], "step_vent": [2, 2], "smother_shatter": [2, 3], "heat_master": [2, 3],
 }
+
+
+# ---------------------------------------------------------------- skills, the Diablo III way
+# There are no skill points. Runes and passives unlock at fixed levels, and the hero picks freely
+# from what is unlocked and can change the choice at any time.
+# Runes: column 2 of TREE. Each tier is one ability with two runes; one rune per ability can be active.
+# Passives: the other columns. Each gives a fixed strength (PASSIVE_RANK) and takes a passive slot.
+
+## Level at which the first and second rune of each ability tier unlocks.
+const RUNE_LEVELS := [[4, 9], [7, 13], [11, 18], [16, 23]]
+const PASSIVE_LEVEL := {"vigor": 10, "ferocity": 10, "second_wind": 13, "swiftness": 16, "precision": 19,
+	"leech": 22, "alacrity": 26, "reach": 30, "flaskmaker": 34, "ashborn": 38}
+## The rank a chosen passive counts as; see UPGRADES for what one rank does.
+const PASSIVE_RANK := {"vigor": 3, "ferocity": 3, "second_wind": 2, "swiftness": 2, "precision": 3,
+	"leech": 2, "alacrity": 2, "reach": 2, "flaskmaker": 2, "ashborn": 2}
+## A passive slot opens at each of these levels.
+const PASSIVE_SLOTS_AT := [10, 20, 30, 45]
+
+
+static func upgrade(id: String) -> Dictionary:
+	for u in UPGRADES:
+		if u.id == id:
+			return u
+	return {}
+
+
+static func is_rune(id: String) -> bool:
+	return TREE.has(id) and int(TREE[id][0]) == 2
+
+
+static func is_passive(id: String) -> bool:
+	return PASSIVE_LEVEL.has(id)
+
+
+## The ability tier a rune belongs to, and whether it is the first or second rune of that tier.
+static func rune_pos(id: String) -> Vector2i:
+	var u := upgrade(id)
+	var tier := int(TREE[id][1])
+	var n := 0
+	for o in UPGRADES:
+		if o.get("cls", "") == u.get("cls", "") and is_rune(o.id) and int(TREE[o.id][1]) == tier:
+			if o.id == id:
+				return Vector2i(tier, n)
+			n += 1
+	return Vector2i(tier, 0)
+
+
+static func unlock_level(id: String) -> int:
+	if is_passive(id):
+		return int(PASSIVE_LEVEL[id])
+	var p := rune_pos(id)
+	return int(RUNE_LEVELS[clampi(p.x, 0, 3)][clampi(p.y, 0, 1)])
+
+
+static func passive_slots(level: int) -> int:
+	var n := 0
+	for l in PASSIVE_SLOTS_AT:
+		if level >= int(l):
+			n += 1
+	return n
+
+
+## The runes of one ability tier for a class, in order.
+static func runes_of(cls: String, tier: int) -> Array:
+	var out: Array = []
+	for u in UPGRADES:
+		if u.get("cls", "") == cls and is_rune(u.id) and int(TREE[u.id][1]) == tier:
+			out.append(u)
+	return out
+
+
+static func passives() -> Array:
+	var out: Array = []
+	for u in UPGRADES:
+		if is_passive(u.id):
+			out.append(u)
+	out.sort_custom(func(a, b): return int(PASSIVE_LEVEL[a.id]) < int(PASSIVE_LEVEL[b.id]))
+	return out
+
+
+## Names of everything that becomes available on reaching this level.
+static func unlocks_at(level: int, cls: String) -> Array:
+	var out: Array = []
+	for u in UPGRADES:
+		var c: String = u.get("cls", "")
+		if c != "" and c != cls:
+			continue
+		if (is_rune(u.id) or is_passive(u.id)) and unlock_level(u.id) == level:
+			out.append(u.name)
+	if level in PASSIVE_SLOTS_AT:
+		out.append("a passive slot")
+	return out
 
 
 static func tree_nodes(col: int, cls: String) -> Array:

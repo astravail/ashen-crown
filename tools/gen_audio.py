@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesises every sound effect and music loop used by Ashen Crown.
+"""Synthesises every sound effect and music loop used by Pyrewake.
 
 Standard library only. Run from the repository root:
     python3 tools/gen_audio.py            # everything

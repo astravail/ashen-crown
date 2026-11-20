@@ -15,10 +15,10 @@ Spilleren er en av de få som overlevde, og må samle bitene av kronen for å kn
 
 ## Mulige undertitler
 
-- *Ashen Crown: Rise of the Ember King*
-- *Ashen Crown: The Last Coronation*
-- *Ashen Crown: Throne of Cinders*
-- *Ashen Crown: Requiem*
+- *Pyrewake: Rise of the Ember King*
+- *Pyrewake: The Last Coronation*
+- *Pyrewake: Throne of Cinders*
+- *Pyrewake: Requiem*
 
 ## Tone
 

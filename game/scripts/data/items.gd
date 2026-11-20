@@ -96,12 +96,12 @@ const LEGENDS := [
 
 ## Rarity weights: common, magic, rare, ashforged.
 const TABLES := {
-	"normal": [60.0, 32.0, 7.9, 0.1],
-	"elite": [0.0, 55.0, 43.0, 2.0],
-	"champion": [0.0, 0.0, 95.0, 5.0],
-	"chest": [30.0, 50.0, 19.7, 0.3],
-	"iron": [0.0, 45.0, 53.0, 2.0],
-	"quest": [0.0, 30.0, 66.0, 4.0],
+	"normal": [72.0, 25.0, 2.95, 0.05],
+	"elite": [0.0, 72.0, 27.0, 1.0],
+	"champion": [0.0, 45.0, 52.0, 3.0],
+	"chest": [45.0, 45.0, 9.85, 0.15],
+	"iron": [0.0, 62.0, 37.0, 1.0],
+	"quest": [0.0, 45.0, 53.0, 2.0],
 	"shop": [20.0, 55.0, 25.0, 0.0],
 }
 
@@ -181,7 +181,7 @@ static func make(slot: String, rarity: int, ilvl: int) -> Dictionary:
 static func make_legend(slot: String, ilvl: int, allow_boss := false, key := "") -> Dictionary:
 	# a legendary is never weaker than the hero who finds it: it is at least a few levels above the zone
 	# and above the hero's own level
-	ilvl = maxi(ilvl + 3, int(Game.stats.get("level", 1)) + 2)
+	ilvl = maxi(ilvl + 1, int(Game.stats.get("level", 1)))
 	var opts: Array = []
 	for l in LEGENDS:
 		if key != "":
@@ -224,7 +224,8 @@ static func _name_for(item: Dictionary) -> String:
 
 
 static func drop_ilvl(zone_idx: int, bonus := 0) -> int:
-	return 1 + zone_idx * 4 + randi_range(0, 3) + bonus
+	# Most drops sit a little below the zone, so a real upgrade is the exception
+	return maxi(1, 1 + zone_idx * 4 + randi_range(-3, 2) + bonus)
 
 
 ## One drop from a table. `slot` forces a slot, `min_r` a minimum rarity.
@@ -237,8 +238,10 @@ static func roll_drop(table: String, ilvl: int, mf := 0.0, slot := "", min_r := 
 
 
 static func boss_loot(ilvl: int) -> Array:
-	var out: Array = [make_legend("weapon", ilvl + 2, true, "crownbreaker"), make_legend(random_slot(), ilvl + 2, true)]
-	for i in 3:
+	var out: Array = [make_legend("weapon", ilvl + 1, true, "crownbreaker")]
+	if randf() < 0.35:
+		out.append(make_legend(random_slot(), ilvl + 1, true))
+	for i in 2:
 		out.append(make(random_slot(), Items_R.RARE, ilvl + 1))
 	return out
 

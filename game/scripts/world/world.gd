@@ -737,7 +737,7 @@ func _set_objective() -> void:
 			objective_pos = r.pois.elder if m != "" else (Vector2(r.finish) + Vector2(0.5, 0.5)) * CELL
 		return
 	if interior:
-		objective = "Find the reliquary chest" if Game.quest_status("story_0") == 1 else "Plunder the depths"
+		objective = "Find the reliquary chest" if Game.quest_status("story_0") == 1 else "Search the depths"
 		objective_pos = Vector2.ZERO
 		for p in props:
 			if p.kind.begins_with("chest") and not p.used:
@@ -766,7 +766,7 @@ func _set_objective() -> void:
 				near = p.global_position.distance_to(player.global_position)
 				objective_pos = p.global_position
 	else:
-		objective = "Speak with the Elder about this land"
+		objective = "Speak with Sister Maren"
 		objective_pos = map.regions[0].pois.elder
 
 
@@ -783,7 +783,7 @@ func spawn_enemy(kind: String, pos: Vector2, special: bool, ri := -1) -> Enemy:
 		e = Enemy.new()
 	e.world = self
 	var d: Dictionary = Game.diff()
-	e.setup(kind, float(zd.hp_mult) * float(Data.GRIND.enemy_hp) * float(d.hp) * (1.25 if Game.fragments.has("greed") else 1.0), float(zd.dmg_mult) * float(d.dmg))
+	e.setup(kind, float(zd.hp_mult) * float(Data.GRIND.enemy_hp) * float(d.hp) * (1.25 if Game.fragments.has("greed") else 1.0), float(zd.dmg_mult) * float(Data.GRIND.enemy_dmg) * float(d.dmg))
 	if kind == "ember_king":
 		e.max_hp *= float(d.hp) * 1.35
 		e.hp = e.max_hp
@@ -1370,12 +1370,11 @@ func _on_champion_dead(e: Enemy, pos: Vector2) -> void:
 	st.props.append(altar)
 	glow_fx.burst(pos, 40, Color(3.0, 1.2, 0.3), 80, 400, 1.2, 3.5, Particles.SPARK)
 	banner.emit("%s falls" % e.display_name, "A crown fragment lies on the altar")
-	# A champion always drops a weapon and two more pieces.
-	var ilvl := Items.drop_ilvl(z, 2)
+	# A champion always drops a weapon and one more piece.
+	var ilvl := Items.drop_ilvl(z, 1)
 	var mf := Game.gear_stat("mf") + float(Game.diff().mf)
-	drop_item(Items.roll_drop("champion", ilvl, mf, "weapon", 2), pos)
-	for i in 2:
-		drop_item(Items.roll_drop("champion", ilvl, mf, "", 2), pos)
+	drop_item(Items.roll_drop("champion", ilvl, mf, "weapon", 1), pos)
+	drop_item(Items.roll_drop("champion", ilvl, mf, "", 1), pos)
 	for i in 6:
 		drop_gold(int((12.0 + 6.0 * z) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold)), pos)
 	Game.quest_advance("champion", z)
@@ -1503,7 +1502,7 @@ func _drop_loot(e: Enemy, pos: Vector2) -> void:
 	if e.elite:
 		drop_gold(int(round(gold_base * 6.0)), pos)
 		drop_item(Items.roll_drop("elite", Items.drop_ilvl(z, 1), mf), pos)
-		if randf() < 0.25:
+		if randf() < float(Data.GRIND.elite_extra):
 			drop_item(Items.roll_drop("elite", Items.drop_ilvl(z, 1), mf), pos)
 		return
 	if randf() < 0.5:
@@ -1522,14 +1521,14 @@ func open_chest(p: Prop) -> void:
 	glow_fx.burst(p.global_position + Vector2(0, -20), 16, Color(3.0, 2.0, 0.6), 60, 240, 0.7, 2.5, Particles.SPARK)
 	var mf := Game.gear_stat("mf") + float(Game.diff().mf)
 	var ilvl := Items.drop_ilvl(maxi(z, 0), 1 if iron else 0)
-	var n := (2 if iron else 1) + (1 if randf() < (0.4 if iron else 0.4) else 0)
+	var n := (2 if iron else 1) + (1 if randf() < (0.25 if iron else 0.15) else 0)
 	for i in n:
 		drop_item(Items.roll_drop("iron" if iron else "chest", ilvl, mf), p.global_position)
 	var gold := int((6.0 + 4.0 * maxi(z, 0)) * randf_range(0.8, 1.4) * (2.0 if iron else 1.0) * float(Data.GRIND.gold_mult) * (1.0 + Game.gear_stat("gold") / 100.0) * float(Game.diff().gold))
 	for i in 3:
 		drop_gold(maxi(1, gold / 3), p.global_position)
 	if not iron and not interior and randf() < 0.1:
-		banner.emit("A trap!", "The chest was bait")
+		banner.emit("Ambush", "The chest was bait")
 		var kinds: Array = (zone.pool as Dictionary).keys()
 		for i in 4:
 			var a := TAU * i / 4.0 + randf()
